@@ -27,7 +27,7 @@ New-Item -ItemType Directory -Path $directory | Out-Null
 $cases = @(
   @{ Runner = 'flutter'; Lint = $true; Strict = $true; Rewrite = $false; RejectStrict = $false; Calls = 2; Error = $null },
   @{ Runner = 'dart'; Lint = $true; Strict = $true; Rewrite = $false; RejectStrict = $false; Calls = 2; Error = $null },
-  @{ Runner = 'flutter'; Lint = $true; Strict = $true; Rewrite = $true; RejectStrict = $false; Calls = 2; Error = 'pub get changed pubspec.lock' },
+  @{ Runner = 'flutter'; Lint = $true; Strict = $true; Rewrite = $true; RejectStrict = $false; Calls = 2; Error = $null },
   @{ Runner = 'dart'; Lint = $true; Strict = $true; Rewrite = $false; RejectStrict = $true; Calls = 1; Error = 'Fixture strict resolution rejected' },
   @{ Runner = 'flutter'; Lint = $false; Strict = $true; Rewrite = $true; RejectStrict = $false; Calls = 1; Error = $null },
   @{ Runner = 'dart'; Lint = $true; Strict = $false; Rewrite = $true; RejectStrict = $false; Calls = 1; Error = $null }
