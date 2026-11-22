@@ -17,8 +17,7 @@ final class PlaybackInfoTabs extends StatefulWidget {
     this.compact = false,
     this.preloadPages = false,
     this.showNavigation = true,
-    bool? swipeEnabled,
-  }) : swipeEnabled = swipeEnabled ?? showNavigation;
+  });
 
   final List<Widget> labels;
   final int value;
@@ -30,7 +29,6 @@ final class PlaybackInfoTabs extends StatefulWidget {
   final bool compact;
   final bool preloadPages;
   final bool showNavigation;
-  final bool swipeEnabled;
 
   @override
   State<PlaybackInfoTabs> createState() => _PlaybackInfoTabsState();
@@ -92,7 +90,7 @@ final class _PlaybackInfoTabsState extends State<PlaybackInfoTabs> {
             viewKey: widget.viewKey,
             pageBuilder: widget.pageBuilder,
             preloadPages: widget.preloadPages,
-            swipeEnabled: widget.swipeEnabled,
+            swipeEnabled: widget.showNavigation,
           ),
         ),
       ],

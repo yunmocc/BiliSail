@@ -18,3 +18,29 @@ function Confirm-IosMuxFrameworkLayout([string]$Framework) {
   })
   Confirm-IosMuxFrameworkEntries $entries
 }
+
+function Confirm-IosFvpBundle([string]$App, [string]$ExpectedMdkVersion) {
+  if (!(Test-Path -LiteralPath $App -PathType Container)) { throw 'iOS app bundle is missing.' }
+  $assets = 'Frameworks/App.framework/flutter_assets/native/fvp'
+  foreach ($required in @(
+    'Frameworks/mdk.framework/mdk',
+    'Frameworks/fvp.framework/fvp',
+    "$assets/assets.lock.json",
+    "$assets/NOTICE.md",
+    "$assets/LICENSE-fvp.txt",
+    "$assets/LICENSE-libass.txt",
+    "$assets/mdk.podspec"
+  )) {
+    $path = Join-Path $App $required
+    if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "iOS fvp bundle is missing: $required" }
+  }
+  $lockPath = Join-Path $App "$assets/assets.lock.json"
+  try {
+    $lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+  } catch {
+    throw "iOS fvp assets.lock.json is invalid: $($_.Exception.Message)"
+  }
+  if ($lock.version -cne $ExpectedMdkVersion) {
+    throw "iOS fvp bundle MDK version $($lock.version) does not match $ExpectedMdkVersion."
+  }
+}

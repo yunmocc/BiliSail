@@ -105,12 +105,30 @@ final class BackendEvent {
     this.dimensions,
     this.value,
     this.failureKind = PlayerFailureKind.nativePlayback,
+    this.generation,
   });
   final BackendEventKind kind;
   final Duration? position, duration, buffered;
   final VideoDimensions? dimensions;
   final bool? value;
   final PlayerFailureKind failureKind;
+
+  /// Native callbacks are tagged with the session that created them. A null
+  /// generation is accepted only for SDKs whose stream is already scoped to
+  /// one backend instance; adapters with asynchronous native callbacks must
+  /// set it so a retired session can never publish into a replacement.
+  final int? generation;
+
+  BackendEvent withGeneration(int generation) => BackendEvent(
+    kind,
+    position: position,
+    duration: duration,
+    buffered: buffered,
+    dimensions: dimensions,
+    value: value,
+    failureKind: failureKind,
+    generation: generation,
+  );
 }
 
 /// A backend may retain its native player after a fully settled source.

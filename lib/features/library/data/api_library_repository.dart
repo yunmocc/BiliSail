@@ -26,7 +26,6 @@ final class ApiLibraryRepository
 
   @override
   Future<WatchHistoryPage> loadHistory({
-    HistoryCategory category = HistoryCategory.all,
     String keyword = '',
     String? cursor,
     required RequestCancellation cancellation,
@@ -46,12 +45,6 @@ final class ApiLibraryRepository
 
       checkCurrent();
       final page = await client.load(
-        type: switch (category) {
-          HistoryCategory.all => ApiHistoryType.all,
-          HistoryCategory.video => ApiHistoryType.archive,
-          HistoryCategory.live => ApiHistoryType.live,
-          HistoryCategory.article => ApiHistoryType.article,
-        },
         keyword: keyword,
         cursor: cursor,
         context: context,

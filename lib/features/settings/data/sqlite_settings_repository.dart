@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../../../domain/playback_rates.dart';
 
 import '../../../domain/recommendation_settings.dart';
@@ -38,7 +40,7 @@ class SqliteSettingsRepository implements SettingsRepository {
     danmakuFontScale: defaultDanmakuFontScale,
     playerControlsMode: defaultPlayerControlsMode,
     videoCardHoverPlayback: defaultVideoCardHoverPlayback,
-  );
+  ).copyWith(playbackBackend: defaultPlaybackBackend);
 
   @override
   Future<AppSettings> load() async {
@@ -67,6 +69,23 @@ class SqliteSettingsRepository implements SettingsRepository {
       'danmakuFontScale',
       defaultDanmakuFontScale,
     );
+    final schemaVersion = decoded['schemaVersion'] is int
+        ? decoded['schemaVersion'] as int
+        : 0;
+    final storedBackend = PlaybackBackendPreference.values
+        .where((item) => item.name == decoded['playbackBackend'])
+        .firstOrNull;
+    // 1.3.x had only media_kit and wrote it on every save. On iOS that value
+    // was not a choice, so schema 46-53 migrates to the new iOS default. A
+    // 1.2.9 snapshot (45) could contain a deliberate media_kit or fvp choice
+    // and is preserved; 54+ is an explicit choice under this build.
+    final migratedBackend =
+        defaultTargetPlatform == TargetPlatform.iOS &&
+            schemaVersion >= 46 &&
+            schemaVersion < 54 &&
+            storedBackend == PlaybackBackendPreference.mediaKit
+        ? PlaybackBackendPreference.fvp
+        : storedBackend ?? defaultPlaybackBackend;
     return AppSettings(
       recommendations: RecommendationSettings.fromJson(
         decoded['recommendations'],
@@ -226,11 +245,7 @@ class SqliteSettingsRepository implements SettingsRepository {
               .firstOrNull ??
           VideoDecodingPreference.automatic,
       // Unknown or retired backends fall back without resetting the snapshot.
-      playbackBackend:
-          PlaybackBackendPreference.values
-              .where((item) => item.name == decoded['playbackBackend'])
-              .firstOrNull ??
-          PlaybackBackendPreference.mediaKit,
+      playbackBackend: normalizePlaybackBackend(migratedBackend),
       androidVideoOutput:
           AndroidVideoOutputPreference.values
               .where((item) => item.name == decoded['androidVideoOutput'])
@@ -318,7 +333,7 @@ class SqliteSettingsRepository implements SettingsRepository {
     return database.writeSetting(
       'preferences.v1',
       jsonEncode({
-        'schemaVersion': 53,
+        'schemaVersion': 54,
         'appIcon': value.appIcon.name,
         'recommendations': value.recommendations.toJson(),
         'navigationBarMode': value.navigationBarMode.name,

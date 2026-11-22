@@ -825,6 +825,16 @@ final class _SettingsCategoryPageState
                                 : '使用 media_kit 进行软件解码，可能增加 CPU 占用和耗电。',
                             style: const TextStyle(fontSize: 12),
                           ),
+                          if (defaultTargetPlatform == TargetPlatform.iOS) ...[
+                            _choices('播放后端', s.playbackBackend, const {
+                              PlaybackBackendPreference.fvp: 'fvp / MDK（默认）',
+                              PlaybackBackendPreference.mediaKit: 'media_kit',
+                            }, controller.setPlaybackBackend),
+                            const Text(
+                              'iOS 默认使用 fvp 硬件解码；画面或声音异常时可切回 media_kit。切换后下次打开或重新加载播放源时生效。',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ],
                           if (defaultTargetPlatform ==
                               TargetPlatform.android) ...[
                             _choices(

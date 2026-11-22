@@ -43,4 +43,25 @@ try {
   # This exact absolute directory was created above, under the system temp dir.
   Remove-Item -LiteralPath $work -Recurse -Force
 }
-Write-Output 'iOS framework directory and archive layout checks passed (14 cases).'
+$fvpWork = Join-Path ([System.IO.Path]::GetTempPath()) "bilisail-ios-fvp-$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Path $fvpWork | Out-Null
+try {
+  $app = Join-Path $fvpWork 'Runner.app'
+  New-Item -ItemType Directory -Path (Join-Path $app 'Frameworks/mdk.framework') -Force | Out-Null
+  New-Item -ItemType Directory -Path (Join-Path $app 'Frameworks/fvp.framework') -Force | Out-Null
+  $assets = Join-Path $app 'Frameworks/App.framework/flutter_assets/native/fvp'
+  New-Item -ItemType Directory -Path $assets -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $app 'Frameworks/mdk.framework/mdk') -Value 'fixture'
+  Set-Content -LiteralPath (Join-Path $app 'Frameworks/fvp.framework/fvp') -Value 'fixture'
+  foreach ($name in @('NOTICE.md', 'LICENSE-fvp.txt', 'LICENSE-libass.txt', 'mdk.podspec')) {
+    Set-Content -LiteralPath (Join-Path $assets $name) -Value 'fixture'
+  }
+  Copy-Item -LiteralPath (Join-Path $repoRoot 'native/fvp/assets.lock.json') -Destination (Join-Path $assets 'assets.lock.json')
+  Confirm-IosFvpBundle $app '0.39.0'
+  Assert-Rejected { Confirm-IosFvpBundle $app '0.39.1' }
+  Remove-Item -LiteralPath (Join-Path $assets 'LICENSE-libass.txt')
+  Assert-Rejected { Confirm-IosFvpBundle $app '0.39.0' }
+} finally {
+  Remove-Item -LiteralPath $fvpWork -Recurse -Force
+}
+Write-Output 'iOS framework and fvp bundle layout checks passed (17 cases).'

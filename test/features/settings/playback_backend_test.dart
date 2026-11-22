@@ -9,6 +9,7 @@ import 'package:bilisail/features/settings/presentation/settings_screen.dart';
 import 'package:bilisail/shared/ui/app_notice.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -278,4 +279,98 @@ void main() {
       PlaybackBackendPreference.mediaKit,
     );
   });
+  test(
+    'iOS migrates the forced 1.3 backend and preserves 1.2.9 choices',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final repository = SqliteSettingsRepository(database);
+      expect(
+        (await repository.load()).playbackBackend,
+        PlaybackBackendPreference.fvp,
+      );
+      for (final value in [null, 'fvp', 'unknown', 1]) {
+        await database.writeSetting(
+          'preferences.v1',
+          jsonEncode({
+            'schemaVersion': 40,
+            'playbackBackend': value,
+            'defaultVolume': 37,
+          }),
+        );
+        final settings = await repository.load();
+        expect(settings.playbackBackend, PlaybackBackendPreference.fvp);
+        expect(settings.defaultVolume, 37);
+      }
+      for (final (version, stored, expected) in [
+        (53, 'mediaKit', PlaybackBackendPreference.fvp),
+        (46, 'mediaKit', PlaybackBackendPreference.fvp),
+        (45, 'mediaKit', PlaybackBackendPreference.mediaKit),
+        (45, 'fvp', PlaybackBackendPreference.fvp),
+        (54, 'mediaKit', PlaybackBackendPreference.mediaKit),
+      ]) {
+        await database.writeSetting(
+          'preferences.v1',
+          jsonEncode({
+            'schemaVersion': version,
+            'playbackBackend': stored,
+            'defaultVolume': 37,
+          }),
+        );
+        expect(
+          (await repository.load()).playbackBackend,
+          expected,
+          reason: 'schema=$version stored=$stored',
+        );
+      }
+      await repository.save(
+        (await repository.load()).copyWith(
+          playbackBackend: PlaybackBackendPreference.fvp,
+        ),
+      );
+      final snapshot = jsonDecode(
+        (await database.readSetting('preferences.v1'))!,
+      ) as Map<String, Object?>;
+      expect(snapshot['playbackBackend'], 'fvp');
+    },
+  );
+  testWidgets('iOS playback settings switch between fvp and media_kit', (
+    tester,
+  ) async {
+    final repository = MemorySettingsRepository()
+      ..value = AppSettings(playbackBackend: PlaybackBackendPreference.fvp);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [settingsRepositoryProvider.overrideWithValue(repository)],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SettingsScreen(category: SettingsCategory.playback),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final backend = find.text('播放后端');
+    await tester.scrollUntilVisible(
+      backend,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('fvp / MDK（默认）'), findsOneWidget);
+    expect(find.text('media_kit'), findsOneWidget);
+    ChoiceChip chipFor(String label) => tester.widget<ChoiceChip>(
+      find.ancestor(of: find.text(label), matching: find.byType(ChoiceChip)),
+    );
+    expect(chipFor('fvp / MDK（默认）').selected, isTrue);
+    await tester.tap(find.text('media_kit'));
+    await tester.pumpAndSettle();
+    expect(
+      repository.value.playbackBackend,
+      PlaybackBackendPreference.mediaKit,
+    );
+    expect(chipFor('media_kit').selected, isTrue);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 }

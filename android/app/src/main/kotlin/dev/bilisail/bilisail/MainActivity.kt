@@ -19,9 +19,6 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        if (!flutterEngine.plugins.has(DownloadExecutionPlugin::class.java)) {
-            flutterEngine.plugins.add(DownloadExecutionPlugin())
-        }
         updateDisplayMetrics(flutterEngine)
         appIcon = AppIconHandler(this, flutterEngine.dartExecutor.binaryMessenger)
         appRequestDevice = AppRequestDeviceHandler(this, flutterEngine.dartExecutor.binaryMessenger)

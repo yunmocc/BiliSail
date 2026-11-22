@@ -2732,7 +2732,7 @@ void main() {
         initialLocation: '/user/42',
         playerBuilder: (_, _, _) => const SizedBox(),
         livePlayerBuilder: (_, room) => Text('直播播放器 ${room.id.value}'),
-        liveComposerBuilder: (_, _, {required compact}) => const SizedBox(),
+        liveComposerBuilder: (_, _) => const SizedBox(),
       );
       addTearDown(router.dispose);
       await tester.pumpWidget(
@@ -3117,7 +3117,6 @@ final class _HistoryRepository implements LibraryRepository {
   String get accountScope => 'user:1';
   @override
   Future<WatchHistoryPage> loadHistory({
-    HistoryCategory category = HistoryCategory.all,
     String keyword = '',
     String? cursor,
     required RequestCancellation cancellation,

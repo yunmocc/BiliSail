@@ -103,8 +103,7 @@ void main() {
           'backup.example',
         ]);
         expect(media.video.urls.last.queryParameters['sign'], 'backup');
-        expect(media.headers['Referer'], 'https://www.bilibili.com');
-        expect(media.headers['User-Agent'], contains('Version/15.2 Safari/'));
+        expect(media.headers['Referer'], 'https://live.bilibili.com/');
         expect(media.audio, isNull);
         expect(media.duration, Duration.zero);
       },

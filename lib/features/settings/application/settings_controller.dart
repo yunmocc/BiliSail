@@ -13,9 +13,7 @@ final settingsRepositoryProvider = Provider<SettingsRepository>(
       throw UnimplementedError('SettingsRepository must be provided by app'),
 );
 
-final settingsDefaultsProvider = Provider<AppSettings>(
-  (ref) => const AppSettings.defaults(),
-);
+final settingsDefaultsProvider = Provider<AppSettings>((ref) => AppSettings());
 
 final appIconServiceProvider = Provider<AppIconService>(
   (ref) => const UnsupportedAppIconService(),
@@ -218,6 +216,8 @@ final class SettingsController extends AsyncNotifier<AppSettings> {
       update((current) => current.copyWith(mediaCdn: value));
   Future<void> setVideoDecoding(VideoDecodingPreference value) =>
       update((current) => current.copyWith(videoDecoding: value));
+  Future<void> setPlaybackBackend(PlaybackBackendPreference value) =>
+      update((current) => current.copyWith(playbackBackend: value));
   Future<void> setAndroidVideoOutput(AndroidVideoOutputPreference value) =>
       update((current) => current.copyWith(androidVideoOutput: value));
   Future<void> setDefaultPlaybackRate(double value) =>

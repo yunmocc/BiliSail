@@ -1,5 +1,13 @@
 # 第三方来源与分发检查
 
+## 2026-11-22 iOS 可选 fvp 播放后端回归
+
+按用户要求把 fvp／MDK 播放后端只恢复到 iOS，其他平台继续使用 media_kit。fvp 固定 [wang-bin/fvp `e81637411c58a9ae28de246ee73ad06e3418f10e`](https://github.com/wang-bin/fvp/tree/e81637411c58a9ae28de246ee73ad06e3418f10e)（0.40.0，BSD-3-Clause）；其 MDK 核心固定官方 v0.39.0，逐平台 URL／SHA-256 见 `native/fvp/assets.lock.json`。CocoaPods 通过 `native/fvp/mdk.podspec` 下载并校验 Apple SDK，Apple 渲染补丁从 `native/fvp/apple/metal_texture.inc` 生成，原始 BSD 许可保留在 `native/fvp/LICENSE-fvp.txt`。MDK 的 SDK 授权、Flutter 插件 key 以及 SDK 附带 FFmpeg／libass 的许可分别处理，原 SDK 许可文本保留在 `native/fvp/mdk.podspec`，FFmpeg／libass 许可随 `native/fvp/LICENSE-libass.txt` 与 `packages/bili_mux/LICENSE-FFmpeg.txt` 分发。
+
+音频时钟桥接使用 MDK 0.39 的三个未修改 C API 头文件；来源、摘要和许可范围见 [头文件来源](packages/bili_player/third_party/mdk/SOURCE.md)，原许可通知随 `native/fvp/NOTICE.md` 分发。桥接只统计音频解码活动并读取公开的音频时钟，不额外链接 MDK／FFmpeg。
+
+实现范围、平台边界和设备验收结果见 [iOS fvp 回归记录](docs/validation/fvp-ios-port-2026-11-22.md)。
+
 ## 2026-11-20 专栏正文解析
 
 [html 0.15.7](https://pub.dev/packages/html/versions/0.15.7) 用于在 Dart 中解析旧版专栏的 HTML 正文。该包按 MIT 许可分发，传递依赖 [csslib 1.0.2](https://pub.dev/packages/csslib/versions/1.0.2) 使用 BSD-3-Clause。两者均为纯 Dart，包内原始 LICENSE 由 Flutter notices 收集。

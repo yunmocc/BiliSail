@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../../domain/playback_rates.dart';
 import '../../../domain/app_orientation.dart';
 export '../../../domain/app_orientation.dart';
@@ -63,7 +65,22 @@ enum DanmakuStylePreference { shadow, stroke, plain }
 
 enum SponsorBlockMode { disabled, manual, automatic }
 
-enum PlaybackBackendPreference { mediaKit }
+enum PlaybackBackendPreference { mediaKit, fvp }
+
+/// iOS defaults to the MDK backend; every other platform remains media_kit.
+PlaybackBackendPreference get defaultPlaybackBackend =>
+    defaultTargetPlatform == TargetPlatform.iOS
+    ? PlaybackBackendPreference.fvp
+    : PlaybackBackendPreference.mediaKit;
+
+/// Historical fvp choices survive on iOS and fall back to media_kit elsewhere.
+PlaybackBackendPreference normalizePlaybackBackend(
+  PlaybackBackendPreference value,
+) =>
+    value == PlaybackBackendPreference.fvp &&
+        defaultTargetPlatform != TargetPlatform.iOS
+    ? PlaybackBackendPreference.mediaKit
+    : value;
 
 enum AndroidVideoOutputPreference { renderedTexture, directTexture }
 
@@ -124,7 +141,7 @@ final class AppSettings {
     this.preferredVideoCodec = VideoCodecPreference.h264,
     this.mediaCdn = MediaCdnPreference.automatic,
     this.videoDecoding = VideoDecodingPreference.automatic,
-    this.playbackBackend = PlaybackBackendPreference.mediaKit,
+    PlaybackBackendPreference? playbackBackend,
     this.androidVideoOutput = AndroidVideoOutputPreference.renderedTexture,
     this.defaultPlaybackRate = 1.0,
     List<double> playbackRates = PlaybackRates.values,
@@ -157,7 +174,8 @@ final class AppSettings {
     this.sponsorBlockMode = SponsorBlockMode.manual,
     this.sponsorBlockBottomPadding = 120.0,
     List<String> sponsorBlockCategories = supportedSponsorCategories,
-  }) : playbackMode =
+  }) : playbackBackend = playbackBackend ?? defaultPlaybackBackend,
+       playbackMode =
            playbackMode ??
            (continuousPlayback == true || continuousRelatedPlayback
                ? PlaybackMode.continuous

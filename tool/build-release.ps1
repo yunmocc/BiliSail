@@ -155,7 +155,7 @@ if ($isWindowsTarget -and @(($Version -split '[.+]') | Where-Object { [long]$_ -
 }
 if ($isWindowsTarget) { $msiVersion = Get-WindowsMsiVersion $Version }
 if ($isWindowsTarget -and (!$IsWindows -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant() -ne $windowsArch)) {
-  throw "$Target requires a matching Windows $windowsArch host (Flutter selects the target from the host)."
+  throw "$Target requires a matching Windows $windowsArch host (Flutter 3.50.0 selects the target from the host)."
 }
 if ($Target -eq 'macos-arm64' -and (!$IsMacOS -or [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'Arm64')) {
   throw 'macos-arm64 requires an Apple Silicon macOS host.'
@@ -196,8 +196,7 @@ try {
   $sdkJson = & flutter --version --machine
   if ($LASTEXITCODE -ne 0) { throw 'Could not read Flutter SDK version.' }
   $sdk = $sdkJson | ConvertFrom-Json
-  $flutterVersion = (Get-Content -LiteralPath (Join-Path $repoRoot '.flutter-version') -Raw).Trim()
-  if ($sdk.frameworkVersion -ne $flutterVersion) { throw "This checkout is verified with Flutter $flutterVersion." }
+  if ($sdk.frameworkVersion -ne '3.50.0') { throw 'This checkout is verified with Flutter 3.50.0.' }
   if ($isWindowsTarget) {
     $flutterRoot = Split-Path (Split-Path (Get-Command flutter).Source -Parent) -Parent
     $dartBinary = Join-Path $flutterRoot 'bin/cache/dart-sdk/bin/dart.exe'
@@ -234,7 +233,7 @@ try {
   }
   Invoke-BuildStage 'Mux component preparation' { & (Join-Path $PSScriptRoot 'build-download-mux.ps1') -Target $Target }
   # Release builds must regenerate native registrants without dev-only plugins.
-  # Flutter's --no-pub also skips that regeneration.
+  # In Flutter 3.50.0 --no-pub skips that regeneration (not just dependency fetching).
   $versionArgs = @('--release', '--build-name', $buildName, '--build-number', $buildNumber, "--dart-define=BILISAIL_RELEASE_VERSION=$Version")
   New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
 
@@ -290,13 +289,30 @@ try {
         $actual = & plutil -extract $key.Key raw -o - $muxInfo
         if ($LASTEXITCODE -ne 0 -or $actual -cne $key.Value) { throw "Invalid iOS BiliMux framework plist key: $($key.Key)" }
       }
+      $minimumOs = & plutil -extract MinimumOSVersion raw -o - $info
+      if ($LASTEXITCODE -ne 0 -or [version]$minimumOs -lt [version]'15.0') { throw "iOS MinimumOSVersion is below 15.0: $minimumOs" }
+      $fvpLock = Get-Content -LiteralPath 'native/fvp/assets.lock.json' -Raw | ConvertFrom-Json
+      $podLockPath = 'ios/Podfile.lock'
+      if (!(Test-Path -LiteralPath $podLockPath)) { throw 'iOS Podfile.lock is missing after the build.' }
+      $podLock = Get-Content -LiteralPath $podLockPath -Raw
+      if ($podLock -notmatch ('(?m)^  - mdk \(' + [regex]::Escape($fvpLock.version) + '\)$')) {
+        throw "iOS Podfile.lock does not pin MDK $($fvpLock.version)."
+      }
+      if ($podLock -notmatch '(?m)^  - fvp \([^)]+\)$') { throw 'iOS Podfile.lock does not include the fvp pod.' }
+      foreach ($required in @('Frameworks/mdk.framework/mdk', 'Frameworks/fvp.framework/fvp')) {
+        $binary = Join-Path $app $required
+        if (!(Test-Path -LiteralPath $binary)) { throw "iOS fvp framework is missing: $required" }
+        Invoke-BuildCommand lipo @($binary, '-verify_arch', 'arm64')
+      }
+      Confirm-IosFvpBundle $app $fvpLock.version
       Copy-Item -LiteralPath 'THIRD_PARTY_NOTICES.md' -Destination $app
       Invoke-BuildStage 'iOS sideload preparation' { Invoke-BuildCommand python3 @((Join-Path $PSScriptRoot 'ios-sideload.py'), '--prepare-app', $app) }
       $package = Join-Path $releaseDir "$name-unsigned.ipa"
       Invoke-BuildStage 'IPA archive export' { Invoke-BuildCommand ditto @('-c', '-k', '--keepParent', $payload, $package) }
       $ipa = [System.IO.Compression.ZipFile]::OpenRead($package)
       try {
-        if (!$ipa.GetEntry('Payload/Runner.app/Info.plist') -or !$ipa.GetEntry('Payload/Runner.app/Frameworks/BiliMux.framework/BiliMux')) {
+        if (!$ipa.GetEntry('Payload/Runner.app/Info.plist') -or !$ipa.GetEntry('Payload/Runner.app/Frameworks/BiliMux.framework/BiliMux') -or
+            !$ipa.GetEntry('Payload/Runner.app/Frameworks/mdk.framework/mdk') -or !$ipa.GetEntry('Payload/Runner.app/Frameworks/fvp.framework/fvp')) {
           throw 'Unsigned IPA has an invalid Payload layout.'
         }
         $muxPrefix = 'Payload/Runner.app/Frameworks/BiliMux.framework/'
@@ -367,7 +383,7 @@ try {
     { $_ -in @('macos-arm64', 'macos-x64') } {
       $arm64Only = if ($Target -eq 'macos-arm64') { '--enable-macos-arm64-only' } else { '--no-enable-macos-arm64-only' }
       Invoke-BuildCommand flutter @('config', '--enable-macos-desktop', $arm64Only)
-      # Flutter forwards FLUTTER_XCODE_* settings to xcodebuild.
+      # Flutter 3.50.0 forwards FLUTTER_XCODE_* settings to xcodebuild.
       # Select one architecture so the mux framework and Flutter app match.
       $env:FLUTTER_XCODE_ARCHS = $macosArch
       $env:FLUTTER_XCODE_CODE_SIGN_IDENTITY = '-'

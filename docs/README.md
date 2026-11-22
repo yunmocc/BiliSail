@@ -1,6 +1,6 @@
 # BiliSail（哔帆）设计文档
 
-2026-11-12：已移除 fvp／MDK，当前仅使用 media_kit。历史文档中的双后端实现、SDK、命令及测试记录保留当时事实，不再作为现行入口；清理与设置兼容见[移除记录](validation/fvp-removal-2026-11-12.md)。
+2026-11-22：iOS 恢复可选 fvp／MDK 播放后端，其他平台继续使用 media_kit；构建、生命周期与设备验收边界见[iOS fvp 回归](validation/fvp-ios-port-2026-11-22.md)。2026-11-12 的清理与迁移记录保留当时事实，见[移除记录](validation/fvp-removal-2026-11-12.md)。
 
 设计与实现日期：2026-10-05。状态：已创建 0.1.0 Windows 预览工程；完整设计仍是后续路线，当前能力与验证边界见 [M0 实测记录](validation/m0-results.md) 和 [根 README](../README.md)。
 
@@ -87,6 +87,7 @@
 | [Android 解码直出与 SurfaceView](validation/android-surface-output-2026-11-07.md) | 两后端纹理直出实验设置、4K60 H.264 约 25 Mbps／3× 实机对照、HC／HCPP 原型与限制 |
 | [迷你小窗与置顶](validation/mini-player-2026-11-07.md) | 桌面置顶、尺寸与位置恢复，Android 画中画、移动应用内浮窗，以及 #102 关闭黑屏与 macOS 关闭竞态修复 |
 | [可选 fvp 播放后端](validation/fvp-backend-2026-11-07.md) | 默认 media_kit、设置切换、固定 MDK 资产、分轨与生命周期、实机对照边界 |
+| [iOS fvp 播放后端](validation/fvp-ios-port-2026-11-22.md) | 固定 fvp／MDK、单包双后端、会话代次、单飞销毁、CI／IPA 与验收清单 |
 | [Android fvp 原生进程隔离](validation/android-fvp-process-isolation-2026-11-07.md) | 子进程崩溃保留主界面、脱敏诊断、显式重新打开及受控故障验证 |
 | [两后端统一缓冲窗口](validation/unified-buffer-window-2026-11-07.md) | 普通播放最多 2 分钟、预览 5 秒、相同素材的原生对照验证 |
 | [个人媒体 fork 统一维护](validation/media-kit-personal-fork-2026-11-07.md) | 官方基线、八个固定 Git 包、libmpv 源码／资产、平台修复和验证边界 |

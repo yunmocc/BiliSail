@@ -237,10 +237,7 @@ final class _DownloadDialogState extends ConsumerState<DownloadDialog> {
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.pop(context);
       messenger?.showSnackBar(
-        SnackBar(
-          content: Text('已添加 ${selected.length} 项下载任务'),
-          duration: const Duration(milliseconds: 1500),
-        ),
+        SnackBar(content: Text('已添加 ${selected.length} 项下载任务')),
       );
     } on AppFailure catch (error) {
       if (mounted) setState(() => _error = error.message);

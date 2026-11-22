@@ -289,15 +289,13 @@ class _BiliAppState extends ConsumerState<BiliApp> {
           );
         },
       ),
-      liveComposerBuilder: (context, roomId, {required compact}) =>
-          LiveDanmakuComposer(
-            compact: compact,
-            roomId: roomId,
-            onLogin: () => showAppDialog<void>(
-              context: context,
-              builder: (_) => const AccountDialog(),
-            ),
-          ),
+      liveComposerBuilder: (context, roomId) => LiveDanmakuComposer(
+        roomId: roomId,
+        onLogin: () => showAppDialog<void>(
+          context: context,
+          builder: (_) => const AccountDialog(),
+        ),
+      ),
       accountBuilder: (context) => AccountButton(
         onOpenUser: (user) => context.go('/user/${user.value}'),
         onNavigate: (path) => context.go(path),
@@ -357,6 +355,12 @@ class _BiliAppState extends ConsumerState<BiliApp> {
     );
     _router.routeInformationProvider.addListener(_routeChanged);
     _lifecycle = AppLifecycleListener(
+      onStateChange: (state) {
+        if (state == AppLifecycleState.paused &&
+            widget.dependencies.files.pauseDownloadsInBackground) {
+          unawaited(widget.dependencies.downloads.pauseAll());
+        }
+      },
       onExitRequested: () async {
         await widget.dependencies.close();
         return AppExitResponse.exit;

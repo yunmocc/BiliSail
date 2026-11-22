@@ -526,7 +526,10 @@ class SharedPlayerEngine
   }
 
   void _event(BackendEvent event, int generation, PlaybackBackend backend) {
-    if (!_current(generation, backend)) return;
+    if (!_current(generation, backend) ||
+        (event.generation != null && event.generation != generation)) {
+      return;
+    }
     if (event.kind == BackendEventKind.buffering) {
       _backendBuffering = event.value ?? false;
     }
@@ -590,11 +593,6 @@ class SharedPlayerEngine
           unawaited(_control(generation, (b) => b.pauseAndWait()));
         }
       case BackendEventKind.ended:
-        if (_live && _snapshot.desiredPlaying && _networkRetry != null) {
-          // A completed callback can beat the pending SDK network-error timer.
-          unawaited(_fail(PlayerFailureKind.liveReadTerminated));
-          return;
-        }
         final position = event.position ?? _snapshot.position;
         final duration = _snapshot.duration;
         // At audio-only EOF the sampled audio clock can lag behind the
@@ -660,10 +658,7 @@ class SharedPlayerEngine
             (_live || (_backendBuffering && backend.buffered?.inSeconds == 0));
         unawaited(
           _fail(
-            networkEnded &&
-                    event.failureKind == PlayerFailureKind.nativePlayback
-                ? PlayerFailureKind.networkOpen
-                : event.failureKind,
+            networkEnded ? PlayerFailureKind.networkOpen : event.failureKind,
           ),
         );
     }

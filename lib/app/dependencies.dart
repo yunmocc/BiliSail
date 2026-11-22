@@ -37,8 +37,6 @@ import '../features/downloads/data/api_download_source_repository.dart';
 import '../features/downloads/data/sqlite_download_repository.dart';
 import '../features/downloads/data/download_file_store.dart';
 import '../features/downloads/data/native_download_muxer.dart';
-import '../features/downloads/data/http_download_transfer.dart';
-import '../features/downloads/data/mobile_download_execution.dart';
 import '../features/playback/data/offline_playback_repository.dart';
 import '../core/platform/external_links.dart';
 import '../core/platform/system_font_catalog.dart';
@@ -312,18 +310,10 @@ class AppDependencies {
       accountScope: () => session.accountScope,
       cdnPreference: cdnPreference,
     );
-    late final SqliteDownloadRepository downloads;
-    downloads = SqliteDownloadRepository(
+    final downloads = SqliteDownloadRepository(
       database,
       downloadSources,
       muxer: NativeDownloadMuxer(),
-      setBackgroundActive: Platform.isAndroid || Platform.isIOS
-          ? (active) =>
-                MobileDownloadExecution.setActive(active, downloads.pauseAll)
-          : null,
-      transfer: Platform.isIOS
-          ? const HttpDownloadTransfer(background: IosBackgroundTransfer())
-          : null,
       publicStorage: Platform.isAndroid
           ? const AndroidPublicDownloadStorage()
           : null,
@@ -334,10 +324,28 @@ class AppDependencies {
       ),
     );
     PlayerEngine createPlayerEngine() => ConfigurablePlayerEngine.select(
-      selectEngine: () async => PlayerEngineSelection(
-        PlaybackBackendPreference.mediaKit,
-        () async => MediaKitEngine(onDiagnostic: playbackLog?.record),
-      ),
+      selectEngine: () async {
+        final saved = await settings.load();
+        // An imported setting from another platform must not select an
+        // unsupported backend. iOS owns the only FVP runtime.
+        final preference =
+            saved.playbackBackend == PlaybackBackendPreference.fvp &&
+                Platform.isIOS
+            ? PlaybackBackendPreference.fvp
+            : PlaybackBackendPreference.mediaKit;
+        return PlayerEngineSelection(
+          preference,
+          () async => switch (preference) {
+            PlaybackBackendPreference.mediaKit => MediaKitEngine(
+              onDiagnostic: playbackLog?.record,
+            ),
+            PlaybackBackendPreference.fvp => FvpEngine(
+              onDiagnostic: (event) =>
+                  playbackLog?.record(event, backend: 'fvp'),
+            ),
+          },
+        );
+      },
     );
     final cardPreviews = VideoCardPreviewPlayback(
       createEngine: createPlayerEngine,
@@ -380,18 +388,17 @@ class AppDependencies {
     final playback = PlaybackManager(
       systemMediaControls: systemMedia,
       createSession: (sleepTimer) {
-        final networkContent = ApiContentPlaybackRepository(
-          PgcClient(api),
-          LiveClient(api),
-          requests,
-          cdnPreference: cdnPreference,
-          audioQualityPreference: audioQualityPreference,
-        );
         final repository = OfflinePlaybackRepository(
           downloads: downloads,
           network: playbackRepository,
           networkMetadata: playbackRepository,
-          networkContent: networkContent,
+          networkContent: ApiContentPlaybackRepository(
+            PgcClient(api),
+            LiveClient(api),
+            requests,
+            cdnPreference: cdnPreference,
+            audioQualityPreference: audioQualityPreference,
+          ),
         );
         return PlaybackSession(
           cardPreviews: Platform.isWindows ? cardPreviews : null,
@@ -412,7 +419,6 @@ class AppDependencies {
           sessionEpoch: () => requests.sessionEpoch,
           metadataRepository: repository,
           contentRepository: repository.content,
-          isRoomLive: networkContent.isRoomLive,
           accountScope: () => session.accountScope,
           progress: LocalProgressStore(
             readProgress: library.resumePosition,
