@@ -12,6 +12,7 @@ import '../shared/ui/app_dialog.dart';
 import '../shared/ui/responsive_layout_scope.dart';
 import '../core/platform/desktop_window_chrome.dart';
 import '../core/platform/detached_playback_window.dart';
+import '../core/platform/screen_wakelock.dart';
 import '../core/platform/window_service.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../features/downloads/domain/download_models.dart';
@@ -59,7 +60,9 @@ class BiliApp extends ConsumerStatefulWidget {
   const BiliApp({
     super.key,
     required this.dependencies,
-    this.videoComposition = const FlutterVideoCompositionAdapter(),
+    this.videoComposition = const WakelockVideoCompositionAdapter(
+      FlutterVideoCompositionAdapter(),
+    ),
   });
   final AppDependencies dependencies;
   final VideoCompositionAdapter videoComposition;

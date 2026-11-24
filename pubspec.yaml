@@ -50,6 +50,9 @@ dependencies:
     path: packages/bili_mux
   webview_all: 1.5.0
   image_picker: 1.2.4
+  # Direct dependency: the native texture video output holds the display awake
+  # itself, and a package may only import a plugin it declares.
+  wakelock_plus: 1.8.1
 
 # Keep core, video output and native library manifests on one reviewed fork commit.
 dependency_overrides:
