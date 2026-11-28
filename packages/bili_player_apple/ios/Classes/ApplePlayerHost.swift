@@ -138,7 +138,15 @@ final class ApplePlayerHost: NSObject {
   }
 
   private func visibleLayer() -> AVPlayerLayer? {
-    layers.values.first { $0.superlayer != nil } ?? layers.values.last
+    // Card previews can own small attached layers too. Prefer the largest
+    // attached player layer so PiP always follows the full-screen player.
+    let attached = layers.values.filter { $0.superlayer != nil && $0.player != nil }
+    if let largest = attached.max(by: {
+      $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height
+    }) {
+      return largest
+    }
+    return layers.values.first { $0.superlayer != nil }
   }
 
   func handlePictureInPicture(
