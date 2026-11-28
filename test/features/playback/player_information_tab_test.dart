@@ -206,10 +206,9 @@ void main() {
       expect(first, contains('解码丢帧（累计）：—'));
       expect(first, contains('视频 CDN：example.com'));
       expect(first, contains('音频 CDN：example.com'));
-      expect(first, contains('全部 CDN 主机：example.com'));
       expect(
         first.split('\n').where((line) => line.contains('：')),
-        hasLength(50),
+        hasLength(49),
       );
       expect(first, endsWith('丢帧计数随媒体源重建而重置。'));
       expect(find.text('播放信息已复制'), findsOneWidget);

@@ -10,7 +10,7 @@ class WindowBrightnessService {
   final int _owner = ++_nextOwner;
   Future<void> _writes = Future<void>.value();
 
-  bool get isNative => Platform.isAndroid;
+  bool get isNative => Platform.isIOS || Platform.isAndroid;
 
   Future<double> read() async {
     final value = await _channel

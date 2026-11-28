@@ -24,7 +24,6 @@ final class PlaybackInformation {
     this.audioBandwidth,
     this.videoCdn,
     this.audioCdn,
-    this.cdnHosts,
     this.liveLine,
     this.native,
   });
@@ -38,7 +37,7 @@ final class PlaybackInformation {
 
   /// Resolved CDN hosts for the active tracks, useful for spotting a faulty
   /// mirror without exposing signed URLs.
-  final String? videoCdn, audioCdn, cdnHosts, liveLine;
+  final String? videoCdn, audioCdn, liveLine;
   final PlayerPlaybackInformation? native;
 }
 
@@ -74,10 +73,6 @@ final class PlaybackInformationController
     final videoUrls = media?.video.urls ?? const <Uri>[];
     final audioUrls = media?.audio?.urls ?? const <Uri>[];
     String? host(Uri? uri) => uri == null || uri.host.isEmpty ? null : uri.host;
-    final hosts = <String>{
-      for (final uri in [...videoUrls, ...audioUrls])
-        if (uri.host.isNotEmpty) uri.host,
-    }.toList();
     final lineIndex = media == null || media.liveStreams.isEmpty
         ? -1
         : media.liveStreams.indexWhere(
@@ -120,10 +115,6 @@ final class PlaybackInformationController
           : media?.audio?.bandwidth,
       videoCdn: host(videoUrls.firstOrNull),
       audioCdn: host(audioUrls.firstOrNull),
-      cdnHosts: hosts.isEmpty
-          ? null
-          : '${hosts.take(4).join(' / ')}'
-                '${hosts.length > 4 ? ' +${hosts.length - 4}' : ''}',
       liveLine: lineIndex >= 0 ? liveLineLabel(lineIndex) : null,
       native: native,
     );

@@ -137,10 +137,10 @@ final class _MdkPlayerPort
   final _prepared = Completer<bool>();
   final _paused = Completer<void>();
   Future<int>? _textureCreation;
+  int? _readyTexture;
   bool _closed = false;
   bool _closing = false;
   bool _live = false;
-  bool _liveStarted = false;
   bool _ended = false;
   mdk.PlaybackState _observedState = mdk.PlaybackState.stopped;
   Duration _startPosition = Duration.zero;
@@ -474,12 +474,18 @@ final class _MdkPlayerPort
 
   @override
   Future<int> createTexture() => _textureCreation = () async {
+    // Live registers its texture before playback starts. Reuse it so the
+    // render callback keeps a single destination instead of replacing it.
+    if (_readyTexture case final texture? when texture >= 0) return texture;
     final texture = await _player.updateTexture(
       width: _dimensions?.width,
       height: _dimensions?.height,
       fit: false,
     );
-    if (!_closing && !_closed && texture >= 0) _textureDimensions = _dimensions;
+    if (!_closing && !_closed && texture >= 0) {
+      _readyTexture = texture;
+      _textureDimensions = _dimensions;
+    }
     return texture;
   }();
 
@@ -488,29 +494,14 @@ final class _MdkPlayerPort
     _connectAudioClock();
     _holdClock(_startPosition.inMilliseconds);
     if (_live) {
-      // The engine starts live playback before confirming video, but MDK only
-      // delivers a frame to a texture attached after the pipeline began once a
-      // new target is decoded. Pause and re-enter the buffered live window so
-      // the first frame is actually rendered, then resume playback.
-      if (_liveStarted) await _active(_pauseAndWait());
-      final result = await _active(
-        _player.seek(
-          position: 0,
-          flags: const mdk.SeekFlag(
-            mdk.SeekFlag.fromStart | mdk.SeekFlag.inCache,
-          ),
-        ),
-      );
-      if (result < 0) {
-        // Some live formats reject seeks; keep the user's intent and await a
-        // naturally rendered frame instead of failing an otherwise playing
-        // stream.
-        if (_liveStarted) play();
-        return _active(_firstFrame.ready(directSurface: false));
-      }
-      final ready = await _active(_firstFrame.ready(directSurface: false));
-      if (ready && _liveStarted) play();
-      return ready;
+      // Live playback starts during prepare, before this texture exists, so
+      // MDK's one-shot `render.video 1st_frame` event is already consumed and
+      // will never arrive. The texture player installs its render callback when
+      // the texture is created and refreshes it for every following frame, so
+      // the output is live. Never pause or seek a live pipeline here: that
+      // interrupts the stream the engine has already started.
+      _videoRendered = true;
+      return true;
     }
     final result = await _active(
       _player.seek(
@@ -594,7 +585,6 @@ final class _MdkPlayerPort
 
   @override
   void play() {
-    _liveStarted = true;
     _audioCompanion?.play();
     audio_activity.bili_fvp_audio_clock_play(_audioClock);
     _playingClock
@@ -870,6 +860,7 @@ final class _MdkPlayerPort
       // Texture creation already reports its failure; release remains required.
     }
     _closed = true;
+    _readyTexture = null;
     await _native?.disposeAsync();
     audio_activity.bili_fvp_audio_clock_release(_audioClock);
     _audioClock = nullptr;

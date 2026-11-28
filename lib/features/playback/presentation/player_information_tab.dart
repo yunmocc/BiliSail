@@ -250,7 +250,6 @@ class _PlayerInformationTabState extends State<PlayerInformationTab>
                       (info.audioOnly || info.isLive ? '内嵌 / 同视频源' : '—'),
                 ),
                 if (info.liveLine case final line?) ('直播线路', line),
-                ('全部 CDN 主机', info.cdnHosts ?? '—'),
               ],
             ),
           (
@@ -323,6 +322,7 @@ class _PlayerInformationTabState extends State<PlayerInformationTab>
                 children: [
                   for (final (title, rows) in sections)
                     _section(context, title, rows),
+                  if (!info.isLive) _cdnSwitcher(context),
                   Text(notes, style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
@@ -330,6 +330,43 @@ class _PlayerInformationTabState extends State<PlayerInformationTab>
           ],
         );
       },
+    );
+  }
+
+  /// Manual mirror switch for the current VOD source. Live lines already have
+  /// their own picker, and automatic switching would risk mirror flapping.
+  Widget _cdnSwitcher(BuildContext context) {
+    final session = widget.session;
+    final urls = session?.media?.video.urls ?? const <Uri>[];
+    if (session == null || urls.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('切换视频 CDN', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < urls.length; i++)
+                ChoiceChip(
+                  label: Text(urls[i].host),
+                  selected: i == 0,
+                  onSelected: (_) {
+                    if (i != 0) unawaited(session.changeVideoCdn(i));
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '切换会在当前位置重新打开媒体，可能短暂缓冲。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 

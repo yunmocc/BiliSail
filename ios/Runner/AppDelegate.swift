@@ -7,6 +7,7 @@ import UIKit
   private lazy var downloads = BackgroundDownloads()
   private var downloadPhotos: DownloadPhotosHandler?
   private var deviceOrientation: DeviceOrientationHandler?
+  private var windowBrightness: WindowBrightnessHandler?
   private var liveNetworkChannel: FlutterMethodChannel?
   private var appIconChannel: FlutterMethodChannel?
   override func application(
@@ -28,6 +29,7 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     downloads.attach(to: engineBridge.applicationRegistrar.messenger())
     downloadPhotos = DownloadPhotosHandler(messenger: engineBridge.applicationRegistrar.messenger())
+    windowBrightness = WindowBrightnessHandler(messenger: engineBridge.applicationRegistrar.messenger())
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let channel = FlutterMethodChannel(name: "bilisail/app_icon", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     channel.setMethodCallHandler { call, result in
@@ -75,5 +77,75 @@ import UIKit
     liveNetworkChannel = network
     appIconChannel = channel
     deviceOrientation = DeviceOrientationHandler(messenger: engineBridge.applicationRegistrar.messenger())
+  }
+}
+
+/// Bridges the shared window-brightness channel to the real display brightness.
+///
+/// iOS has no per-window override, so the swipe gesture changes the system
+/// brightness like Control Center does. The first write snapshots the original
+/// value and `reset` restores it when the player leaves.
+final class WindowBrightnessHandler {
+  private let channel: FlutterMethodChannel
+  private var original: CGFloat?
+  private var owner: Int?
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "bilisail/window_brightness",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let arguments = call.arguments as? [String: Any]
+      let caller = (arguments?["owner"] as? NSNumber)?.intValue
+      switch call.method {
+      case "get":
+        result(Double(UIScreen.main.brightness))
+      case "set":
+        guard let raw = arguments?["value"] as? NSNumber else {
+          result(
+            FlutterError(
+              code: "invalid_value",
+              message: "Brightness must be a number.",
+              details: nil
+            )
+          )
+          return
+        }
+        let value = raw.doubleValue
+        guard value.isFinite else {
+          result(
+            FlutterError(
+              code: "invalid_value",
+              message: "Brightness must be finite.",
+              details: nil
+            )
+          )
+          return
+        }
+        if original == nil { original = UIScreen.main.brightness }
+        owner = caller
+        UIScreen.main.brightness = CGFloat(min(max(value, 0), 1))
+        result(nil)
+      case "reset":
+        // A stale owner must not restore brightness owned by a newer player.
+        if let caller, let owner, caller != owner {
+          result(nil)
+          return
+        }
+        if let original {
+          UIScreen.main.brightness = original
+          self.original = nil
+          owner = nil
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }

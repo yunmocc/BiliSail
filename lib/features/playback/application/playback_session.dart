@@ -8,6 +8,7 @@ import 'package:bili_player/bili_player.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../../domain/app_failure.dart';
 import '../../../core/platform/playback_audio_focus.dart';
@@ -118,6 +119,38 @@ class PlaybackSession extends ChangeNotifier {
         _notify();
       }),
     );
+    _appResumed = switch (WidgetsBinding.instance.lifecycleState) {
+      null || AppLifecycleState.resumed => true,
+      _ => false,
+    };
+    if (WidgetsBinding.instance.lifecycleState != null) {
+      _appLifecycle = AppLifecycleListener(
+        onStateChange: (state) {
+          _appResumed = state == AppLifecycleState.resumed;
+          _syncScreenWakeLock();
+        },
+      );
+    }
+    snapshots.addListener(_syncScreenWakeLock);
+  }
+
+  /// Keeps the screen on only while media is actually advancing. Pausing or
+  /// backgrounding releases the lock; there is no timer or polling.
+  void _syncScreenWakeLock() {
+    if (_disposed) return;
+    final snapshot = snapshots.value;
+    final awake =
+        _appResumed &&
+        snapshot.desiredPlaying &&
+        const {
+          PlaybackPhase.opening,
+          PlaybackPhase.ready,
+          PlaybackPhase.playing,
+          PlaybackPhase.buffering,
+        }.contains(snapshot.phase);
+    if (awake == _screenAwake) return;
+    _screenAwake = awake;
+    unawaited(WakelockPlus.toggle(enable: awake).catchError((Object _) {}));
   }
 
   final SponsorRepository? sponsorRepository;
@@ -377,6 +410,9 @@ class PlaybackSession extends ChangeNotifier {
   bool _disposed = false;
   bool _closing = false;
   bool _resolving = false;
+  bool _screenAwake = false;
+  bool _appResumed = true;
+  AppLifecycleListener? _appLifecycle;
   int? _openingLiveGeneration;
   bool _desiredPlaying = true;
   ({
@@ -3015,6 +3051,60 @@ class PlaybackSession extends ChangeNotifier {
     );
   }
 
+  /// Reopens VOD with another resolved CDN mirror, keeping position, rate,
+  /// volume and the presented frame. Explicit and user-triggered, so it never
+  /// flaps between mirrors on its own.
+  Future<void> changeVideoCdn(int index) async {
+    final current = media;
+    if (isLive ||
+        current == null ||
+        index <= 0 ||
+        index >= current.video.urls.length) {
+      return;
+    }
+    final urls = [
+      ...current.video.urls.sublist(index),
+      ...current.video.urls.sublist(0, index),
+    ];
+    final rotated = PlaybackMedia(
+      video: PlaybackTrack(
+        urls: urls,
+        codec: current.video.codec,
+        bandwidth: current.video.bandwidth,
+        embeddedAudioCodec: current.video.embeddedAudioCodec,
+      ),
+      audio: current.audio,
+      audioTracks: current.audioTracks,
+      kind: current.kind,
+      quality: current.quality,
+      qualities: current.qualities,
+      qualityLabels: current.qualityLabels,
+      duration: current.duration,
+      headers: current.headers,
+      voices: current.voices,
+      voice: current.voice,
+      loudness: current.loudness,
+      liveStreams: current.liveStreams,
+      liveStream: current.liveStream,
+      liveRoomId: current.liveRoomId,
+      isIntentionallySilent: current.isIntentionallySilent,
+      pgcSkipSegments: current.pgcSkipSegments,
+    );
+    await _open(
+      detail,
+      part,
+      target: contentTarget,
+      title: contentTitle,
+      quality: _quality,
+      force: true,
+      retryMedia: rotated,
+      position: snapshots.value.position,
+      rate: snapshots.value.rate,
+      volume: snapshots.value.volume,
+      desiredPlaying: _desiredPlaying,
+    );
+  }
+
   Future<void> changeLiveLine(int line) async {
     final current = media;
     if (!isLive ||
@@ -3208,6 +3298,13 @@ class PlaybackSession extends ChangeNotifier {
     await attempt(_releaseAudioFocus);
     await attempt(() async => _historyReporter?.close());
     _disposed = true;
+    snapshots.removeListener(_syncScreenWakeLock);
+    _appLifecycle?.dispose();
+    _appLifecycle = null;
+    if (_screenAwake) {
+      _screenAwake = false;
+      await attempt(WakelockPlus.disable);
+    }
     for (final subscription in _subscriptions) {
       await attempt(subscription.cancel);
     }

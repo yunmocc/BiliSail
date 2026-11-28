@@ -48,6 +48,8 @@ dependencies:
     path: packages/bili_player
   bili_player_fvp:
     path: packages/bili_player_fvp
+  # Screen stays awake only while media is actually playing; pausing releases it.
+  wakelock_plus: 1.8.1
   bili_danmaku:
     path: packages/bili_danmaku
   bili_mux:
