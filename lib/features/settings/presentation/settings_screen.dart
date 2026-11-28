@@ -859,48 +859,13 @@ final class _SettingsCategoryPageState
                         ]),
                       if (widget.category == SettingsCategory.playback)
                         _section('视频编解码', [
-                          _choices('视频解码方式', s.videoDecoding, const {
-                            VideoDecodingPreference.software: '软件解码',
-                            VideoDecodingPreference.automatic: '硬件解码（优先）',
-                          }, controller.setVideoDecoding),
-                          Text(
-                            s.videoDecoding == VideoDecodingPreference.automatic
-                                ? '优先使用硬件解码，不支持当前编码时回退软件解码。'
-                                : '使用 media_kit 进行软件解码，可能增加 CPU 占用和耗电。',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          if (defaultTargetPlatform ==
-                              TargetPlatform.android) ...[
-                            _choices(
-                              'Android 视频输出',
-                              s.androidVideoOutput,
-                              const {
-                                AndroidVideoOutputPreference.renderedTexture:
-                                    '兼容渲染（默认）',
-                                AndroidVideoOutputPreference.directTexture:
-                                    '解码直出纹理（实验）',
-                              },
-                              controller.setAndroidVideoOutput,
-                              enabled:
-                                  s.videoDecoding ==
-                                  VideoDecodingPreference.automatic,
-                            ),
-                            Text(
-                              s.videoDecoding ==
-                                      VideoDecodingPreference.software
-                                  ? '软件解码使用兼容渲染；切回硬件解码后恢复已保存的输出偏好。'
-                                  : '保留弹幕、字幕和控件。解码直出需要设备硬解支持；HDR／杜比视界自动使用兼容渲染，其他画面异常时也可切回。',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
                           const Text(
-                            '解码设置适用于视频、影视、直播、课程、离线播放和悬停预览，下次打开或重新加载播放源时生效。',
+                            'iOS 由 AVPlayer 统一硬件解码，HDR10、HLG 与杜比视界由系统直接输出。',
                             style: TextStyle(fontSize: 12),
                           ),
                           _choices('优先视频编码', s.preferredVideoCodec, const {
                             VideoCodecPreference.h264: 'H.264 / AVC（默认）',
                             VideoCodecPreference.hevc: 'H.265 / HEVC',
-                            VideoCodecPreference.av1: 'AV1',
                             VideoCodecPreference.dolbyVision: '杜比视界 / dvh1',
                           }, controller.setPreferredVideoCodec),
                           const Text(

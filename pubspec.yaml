@@ -41,6 +41,8 @@ dependencies:
     path: packages/bili_api
   bili_player:
     path: packages/bili_player
+  bili_player_apple:
+    path: packages/bili_player_apple
   bili_danmaku:
     path: packages/bili_danmaku
   bili_mux:
@@ -48,20 +50,9 @@ dependencies:
   webview_all: 1.5.0
   image_picker: 1.2.4
 
-# Resolve the player and texture plugin from the same Native Assets revision.
 dependency_overrides:
   # Retain the existing wakelock API and package_info_plus compatibility.
   wakelock_plus: 1.8.1
-  media_kit:
-    git:
-      url: https://github.com/CKopoer/media-kit.git
-      path: media_kit
-      ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
-  media_kit_video:
-    git:
-      url: https://github.com/CKopoer/media-kit.git
-      path: media_kit_video
-      ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
 
 dev_dependencies:
   flutter_driver:

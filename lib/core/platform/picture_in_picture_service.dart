@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// Android's activity PiP uses the existing Flutter surface and media session.
+/// Android activity PiP and iOS AVPictureInPictureController.
 final class PictureInPictureService {
   static final instance = PictureInPictureService();
   static const _channel = MethodChannel('bilisail/picture_in_picture');
@@ -12,7 +12,7 @@ final class PictureInPictureService {
   bool _initialized = false;
 
   Future<bool> isSupported() async {
-    if (!Platform.isAndroid) return false;
+    if (!Platform.isAndroid && !Platform.isIOS) return false;
     if (!_initialized) {
       _initialized = true;
       _channel.setMethodCallHandler((call) async {
@@ -46,6 +46,18 @@ final class PictureInPictureService {
     } catch (_) {
       active.value = false;
       rethrow;
+    }
+  }
+
+  Future<void> exit() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    active.value = false;
+    try {
+      await _channel
+          .invokeMethod<void>('exit')
+          .timeout(const Duration(seconds: 2));
+    } on Object {
+      // The host may already have stopped PiP while the app was backgrounded.
     }
   }
 }

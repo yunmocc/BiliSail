@@ -381,9 +381,7 @@ try {
       $builtApp = 'build/macos/Build/Products/Release/BiliSail.app'
       foreach ($binary in @(
         'MacOS/BiliSail', 'Frameworks/App.framework/App', 'Frameworks/FlutterMacOS.framework/FlutterMacOS',
-        'Frameworks/BiliMux.framework/BiliMux', 'Frameworks/Mpv.framework/Mpv',
-        'Frameworks/media_kit_event_loop.framework/media_kit_event_loop',
-        'Frameworks/media_kit_video.framework/media_kit_video'
+        'Frameworks/BiliMux.framework/BiliMux'
       )) {
         Invoke-BuildCommand lipo @((Join-Path $builtApp "Contents/$binary"), '-verify_arch', $macosArch)
       }

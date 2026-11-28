@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:bili_api/bili_api.dart';
 import 'package:bili_player/bili_player.dart';
+import 'package:bili_player_apple/bili_player_apple.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -258,7 +259,6 @@ class AppDependencies {
     WindowService? windowOverride,
     CoreDiagnosticLog? coreLog,
   }) async {
-    initializePlayerBackend();
     final window = windowOverride ?? WindowService();
     await window.initialize();
     final database = databaseOverride ?? await AppDatabase.open();
@@ -349,7 +349,7 @@ class AppDependencies {
       ),
     );
     PlayerEngine createPlayerEngine() =>
-        MediaKitEngine(onDiagnostic: playbackLog?.record);
+        ApplePlayerEngine(onDiagnostic: playbackLog?.record);
     final cardPreviews = VideoCardPreviewPlayback(
       createEngine: createPlayerEngine,
     );

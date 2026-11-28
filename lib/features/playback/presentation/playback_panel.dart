@@ -1095,6 +1095,8 @@ class _PlaybackPanelState extends ConsumerState<PlaybackPanel>
     try {
       if (widget.window.hasDesktopWindow) {
         await widget.window.setMiniPlayer(false);
+      } else if (_systemPip) {
+        await PictureInPictureService.instance.exit();
       }
     } catch (error) {
       if (mounted) showAppNotice(context, '还原窗口失败：$error');

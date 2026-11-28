@@ -35,7 +35,7 @@ final class PlaybackDiagnosticLog {
     }
   }
 
-  void record(PlayerDiagnosticEvent event, {String backend = 'media_kit'}) =>
+  void record(PlayerDiagnosticEvent event, {String backend = 'AVPlayer'}) =>
       _writer.record({...event.toJson(), 'backend': backend});
   Future<void> flush() => _writer.flush();
   Future<void> close() => _writer.close();
