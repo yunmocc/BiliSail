@@ -5,9 +5,9 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   file_selector_linux
   flutter_secure_storage_linux
+  fvp
   screen_retriever_linux
   url_launcher_linux
-  media_kit_video
   webview_all_linux
   window_manager
 )

@@ -860,12 +860,13 @@ final class _SettingsCategoryPageState
                       if (widget.category == SettingsCategory.playback)
                         _section('视频编解码', [
                           const Text(
-                            'iOS 由 AVPlayer 统一硬件解码，HDR10、HLG 与杜比视界由系统直接输出。',
+                            '由 FVP / MDK 统一解码，优先使用硬件解码器；HDR10、HLG 与杜比视界的实际效果取决于设备和输出。',
                             style: TextStyle(fontSize: 12),
                           ),
                           _choices('优先视频编码', s.preferredVideoCodec, const {
                             VideoCodecPreference.h264: 'H.264 / AVC（默认）',
                             VideoCodecPreference.hevc: 'H.265 / HEVC',
+                            VideoCodecPreference.av1: 'AV1',
                             VideoCodecPreference.dolbyVision: '杜比视界 / dvh1',
                           }, controller.setPreferredVideoCodec),
                           const Text(

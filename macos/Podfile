@@ -1,7 +1,6 @@
 platform :osx, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
-require_relative '../tool/media-kit-apple-pods'
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 project 'Runner', {
@@ -30,9 +29,10 @@ flutter_macos_podfile_setup
 target 'Runner' do
   use_frameworks!
 
+  pod 'mdk', :podspec => '../native/fvp/mdk.podspec'
   flutter_install_all_macos_pods File.dirname(File.realpath(__FILE__))
-  unless system('python3', File.expand_path('../tool/prepare-media-kit-apple.py', __dir__), 'macos')
-    raise 'Could not stage media-kit CocoaPods headers'
+  unless system('python3', File.expand_path('../tool/prepare-fvp-apple.py', __dir__), 'macos')
+    raise 'Could not prepare the pinned fvp Apple texture renderer'
   end
   target 'RunnerTests' do
     inherit! :search_paths
@@ -42,6 +42,5 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
-    bilisail_verify_media_kit_headers(target)
   end
 end

@@ -35,7 +35,7 @@ final class PlaybackDiagnosticLog {
     }
   }
 
-  void record(PlayerDiagnosticEvent event, {String backend = 'AVPlayer'}) =>
+  void record(PlayerDiagnosticEvent event, {String backend = 'fvp / MDK'}) =>
       _writer.record({...event.toJson(), 'backend': backend});
   Future<void> flush() => _writer.flush();
   Future<void> close() => _writer.close();

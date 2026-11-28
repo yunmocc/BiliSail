@@ -12,7 +12,7 @@ import 'dart:io';
 
 import 'package:bili_api/bili_api.dart';
 import 'package:bili_player/bili_player.dart';
-import 'package:bili_player_apple/bili_player_apple.dart';
+import 'package:bili_player_fvp/bili_player_fvp.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as path;
@@ -349,7 +349,7 @@ class AppDependencies {
       ),
     );
     PlayerEngine createPlayerEngine() =>
-        ApplePlayerEngine(onDiagnostic: playbackLog?.record);
+        FvpEngine(onDiagnostic: playbackLog?.record);
     final cardPreviews = VideoCardPreviewPlayback(
       createEngine: createPlayerEngine,
     );

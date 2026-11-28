@@ -91,35 +91,49 @@ final class ApiContentPlaybackRepository
     if (info.liveStatus != 1) {
       throw const AppFailure(AppFailureKind.playback, '主播当前未开播');
     }
-    final streams = List<LivePlaybackStream>.unmodifiable([
-      for (final stream in info.streams)
-        if (stream.urls.isNotEmpty &&
-            // AVPlayer only plays HLS live and has no AV1 decoder.
-            stream.protocol == 'http_hls' &&
-            const ['ts', 'fmp4'].contains(stream.format) &&
-            switch (VideoCodecPreference.fromCodec(stream.codec)) {
-              null || VideoCodecPreference.av1 => false,
-              _ => true,
-            })
-          LivePlaybackStream(
-            preference: LiveStreamPreference(
-              protocol: stream.protocol,
-              format: stream.format,
-              codec: stream.codec,
-            ),
-            urls: stream.urls,
-            quality: stream.quality,
-            qualities: stream.qualities,
-          ),
-    ]);
-    final stream = LivePlaybackStream.select(streams, preference);
-    if (stream == null) {
+    final streams =
+        [
+          for (final stream in info.streams)
+            if (stream.urls.isNotEmpty &&
+                VideoCodecPreference.fromCodec(stream.codec) != null &&
+                const ['http_hls', 'http_stream'].contains(stream.protocol) &&
+                const ['ts', 'fmp4', 'flv'].contains(stream.format))
+              LivePlaybackStream(
+                preference: LiveStreamPreference(
+                  protocol: stream.protocol,
+                  format: stream.format,
+                  codec: stream.codec,
+                ),
+                urls: stream.urls,
+                quality: stream.quality,
+                qualities: stream.qualities,
+              ),
+        ]..sort(
+          (a, b) =>
+              _liveFormatPriority(a.preference.format)
+                  .compareTo(_liveFormatPriority(b.preference.format)),
+        );
+    if (streams.isEmpty) {
       throw const AppFailure(AppFailureKind.playback, '未取得可用的直播流');
     }
+    // Explicit preference, then the broadly compatible H.264 fallback, then
+    // the fastest format the endpoint offered.
+    final stream =
+        streams
+            .where((stream) => stream.preference == preference)
+            .firstOrNull ??
+        streams
+            .where(
+              (stream) =>
+                  VideoCodecPreference.fromCodec(stream.preference.codec) ==
+                  VideoCodecPreference.h264,
+            )
+            .firstOrNull ??
+        streams.first;
     return PlaybackMedia.live(
       roomId: info.roomId,
       stream: stream,
-      streams: streams,
+      streams: List.unmodifiable(streams),
       qualityLabels: info.qualityLabels,
       headers: const {
         'Referer': 'https://www.bilibili.com',
@@ -129,4 +143,11 @@ final class ApiContentPlaybackRepository
       },
     );
   }, cancellation: cancellation);
+
+  // Keep the established fMP4 HLS default when also requesting TS and FLV.
+  static int _liveFormatPriority(String format) => switch (format) {
+    'fmp4' => 0,
+    'ts' => 1,
+    _ => 2,
+  };
 }

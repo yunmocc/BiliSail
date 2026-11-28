@@ -42,7 +42,7 @@ void main() {
         );
         expect(media.liveStream, preference);
         expect(media.video.codec, codec);
-        expect(media.liveStreams.length, 2);
+        expect(media.liveStreams.length, 5);
         expect(media.kind, PlaybackMediaKind.liveHls);
         final fallback = await repository.resolveLive(
           const LivePlaybackTarget('8'),
@@ -59,7 +59,7 @@ void main() {
       },
     );
   }
-  test('FLV and AV1 live lines are filtered out', () async {
+  test('unsupported live combinations fall back to HLS H.264', () async {
     final requests = ApiRequests();
     final api = BiliApiClient(
       transport: _Transport(),

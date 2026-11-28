@@ -426,22 +426,28 @@ void main() {
       },
     );
   }
-  test('AV1-only tracks are skipped and the best decodable quality wins', () {
-    final media = select([
+  test('AV1 tracks decode through FVP without losing quality choices', () {
+    final tracks = [
       _track(32, 'av01.0.08M.08'),
       _track(80, 'hvc1.1.6.L120'),
       _track(80, 'AVC1.640028'),
       _track(120, 'av01.0.08M.08'),
-    ], preferred: VideoCodecPreference.av1);
+    ];
+    final media = select(tracks, preferred: VideoCodecPreference.av1);
     expect(media.quality, 80);
     expect(media.video.codec, 'AVC1.640028');
-    expect(media.qualities, [80]);
-  });
-  test('AV1-only sources are rejected before reaching AVPlayer', () {
-    expect(
-      () => select([_track(80, 'av01.0.08M.08')]),
-      throwsA(isA<AppFailure>()),
+    expect(media.qualities, [32, 80, 120]);
+    final av1 = select(
+      tracks,
+      quality: 120,
+      preferred: VideoCodecPreference.av1,
     );
+    expect(av1.quality, 120);
+    expect(av1.video.codec, 'av01.0.08M.08');
+  });
+  test('AV1-only sources select AV1 for FVP', () {
+    final media = select([_track(80, 'av01.0.08M.08')]);
+    expect(media.video.codec, 'av01.0.08M.08');
     expect(select([_track(80, 'hev1.1.6.L120')]).video.codec, 'hev1.1.6.L120');
   });
   test('unsupported quality uses nearest lower or minimum server quality', () {

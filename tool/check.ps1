@@ -22,7 +22,7 @@ if ($SkipMuxTests -and $Stage -ne 'PackageTests') {
 $runLint = $Stage -in @('All', 'Lint')
 $runRootTests = $Stage -in @('All', 'RootTests')
 $runPackageTests = $Stage -in @('All', 'PackageTests')
-$packages = @('bili_api', 'bili_player', 'bili_danmaku', 'bili_mux')
+$packages = @('bili_api', 'bili_player', 'bili_player_fvp', 'bili_danmaku', 'bili_mux')
 $testPackages = @($packages | Where-Object { !$SkipMuxTests -or $_ -ne 'bili_mux' })
 
 function Invoke-Check([string]$Executable, [string[]]$Parameters) {

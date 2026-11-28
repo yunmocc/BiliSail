@@ -20,12 +20,7 @@ PlaybackMedia selectDashMedia(
   final videos =
       info.dashVideo
           .where(
-            (track) => switch (VideoCodecPreference.fromCodec(track.codecs)) {
-              null => false,
-              // AVPlayer on iPad has no AV1 decoder, so never select it.
-              VideoCodecPreference.av1 => false,
-              _ => true,
-            },
+            (track) => VideoCodecPreference.fromCodec(track.codecs) != null,
           )
           .toList()
         ..sort((a, b) => b.id.compareTo(a.id));
