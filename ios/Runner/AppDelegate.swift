@@ -1,4 +1,6 @@
+import AVFoundation
 import Flutter
+import MediaPlayer
 import Network
 import UIKit
 
@@ -8,6 +10,7 @@ import UIKit
   private var downloadPhotos: DownloadPhotosHandler?
   private var deviceOrientation: DeviceOrientationHandler?
   private var windowBrightness: WindowBrightnessHandler?
+  private var systemVolume: SystemVolumeHandler?
   private var liveNetworkChannel: FlutterMethodChannel?
   private var appIconChannel: FlutterMethodChannel?
   override func application(
@@ -30,6 +33,7 @@ import UIKit
     downloads.attach(to: engineBridge.applicationRegistrar.messenger())
     downloadPhotos = DownloadPhotosHandler(messenger: engineBridge.applicationRegistrar.messenger())
     windowBrightness = WindowBrightnessHandler(messenger: engineBridge.applicationRegistrar.messenger())
+    systemVolume = SystemVolumeHandler(messenger: engineBridge.applicationRegistrar.messenger())
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let channel = FlutterMethodChannel(name: "bilisail/app_icon", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     channel.setMethodCallHandler { call, result in
@@ -147,5 +151,93 @@ final class WindowBrightnessHandler {
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+}
+
+/// Drives the real device output volume. iOS exposes no per-app volume setter,
+/// so the player moves the system slider through an offscreen MPVolumeView,
+/// exactly like the hardware volume buttons.
+final class SystemVolumeHandler {
+  private let channel: FlutterMethodChannel
+  private let volumeView = MPVolumeView(
+    frame: CGRect(x: -200, y: -200, width: 20, height: 20)
+  )
+
+  init(messenger: FlutterBinaryMessenger) {
+    channel = FlutterMethodChannel(
+      name: "bilisail/system_volume",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "get":
+        result(Double(AVAudioSession.sharedInstance().outputVolume))
+      case "set":
+        guard
+          let raw = (call.arguments as? [String: Any])?["value"] as? NSNumber,
+          raw.doubleValue.isFinite
+        else {
+          result(
+            FlutterError(
+              code: "invalid_value",
+              message: "Volume must be a finite number.",
+              details: nil
+            )
+          )
+          return
+        }
+        let value = Float(min(max(raw.doubleValue, 0), 1))
+        DispatchQueue.main.async {
+          self?.apply(value, attempts: 3, result: result)
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func apply(
+    _ value: Float,
+    attempts: Int,
+    result: @escaping FlutterResult
+  ) {
+    guard let window = keyWindow() else {
+      result(
+        FlutterError(code: "no_window", message: "No key window.", details: nil)
+      )
+      return
+    }
+    if volumeView.superview !== window {
+      volumeView.removeFromSuperview()
+      volumeView.frame = CGRect(x: -200, y: -200, width: 20, height: 20)
+      window.addSubview(volumeView)
+      window.layoutIfNeeded()
+    }
+    if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
+      slider.value = value
+      result(nil)
+      return
+    }
+    // MPVolumeView builds its slider on the next layout pass after being added.
+    guard attempts > 0 else {
+      result(
+        FlutterError(
+          code: "unavailable",
+          message: "System volume slider is unavailable.",
+          details: nil
+        )
+      )
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+      self?.apply(value, attempts: attempts - 1, result: result)
+    }
+  }
+
+  private func keyWindow() -> UIWindow? {
+    UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { $0.isKeyWindow }
   }
 }

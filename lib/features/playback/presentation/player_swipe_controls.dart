@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/platform/system_volume_service.dart';
 import '../../../core/platform/window_brightness_service.dart';
 
 /// Only the picture participates; buttons above this layer keep their gestures.
@@ -15,6 +16,7 @@ class PlayerSwipeControls extends StatefulWidget {
     required this.setVolume,
     required this.child,
     this.brightness,
+    this.systemVolume,
     this.onFullScreen,
     this.fullScreen = false,
     this.reverseFullScreenGesture = false,
@@ -26,6 +28,7 @@ class PlayerSwipeControls extends StatefulWidget {
   final Future<void> Function(double) setVolume;
   final Widget child;
   final WindowBrightnessService? brightness;
+  final SystemVolumeService? systemVolume;
   final VoidCallback? onFullScreen;
   final bool fullScreen, reverseFullScreenGesture;
 
@@ -37,6 +40,7 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
     with WidgetsBindingObserver {
   late final _brightnessService =
       widget.brightness ?? WindowBrightnessService();
+  late final _volumeService = widget.systemVolume ?? SystemVolumeService();
   Object? _drag;
   bool _left = false;
   bool _center = false;
@@ -44,9 +48,13 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
   bool _multiplePointers = false;
   bool _foreground = true;
   bool _readingBrightness = false;
+  bool _readingVolume = false;
+  bool _nativeVolume = false;
   bool _released = false;
   bool _writingBrightness = false;
+  bool _writingVolume = false;
   double? _pendingBrightness;
+  double? _pendingVolume;
   double _brightness = 1;
   double _startValue = 0;
   double _delta = 0;
@@ -96,6 +104,7 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
   void _cancel() {
     _drag = null;
     _pendingBrightness = null;
+    _pendingVolume = null;
     _feedback = null;
     _feedbackTimer?.cancel();
   }
@@ -140,7 +149,37 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
     _delta = 0;
     _startValue = _left ? _brightness : widget.volume / 100;
     _readingBrightness = !_center && _left && _brightnessService.isNative;
+    _nativeVolume = !_center && !_left && _volumeService.isNative;
+    _readingVolume = _nativeVolume;
     if (_readingBrightness) unawaited(_readBrightness(drag));
+    if (_readingVolume) unawaited(_readVolume(drag));
+  }
+
+  Future<void> _readVolume(Object drag) async {
+    try {
+      final value = await _volumeService.read();
+      if (!mounted ||
+          !identical(_drag, drag) ||
+          !_enabled ||
+          ModalRoute.of(context)?.isCurrent == false) {
+        return;
+      }
+      _startValue = value;
+      _readingVolume = false;
+      _apply();
+      if (_released) {
+        _drag = null;
+        _hideFeedback();
+      }
+    } catch (_) {
+      // Keep the gesture useful if the platform channel is unavailable.
+      if (mounted && identical(_drag, drag)) {
+        _nativeVolume = false;
+        _readingVolume = false;
+        _startValue = widget.volume / 100;
+        _apply();
+      }
+    }
   }
 
   Future<void> _readBrightness(Object drag) async {
@@ -178,7 +217,7 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
     }
     _delta -= details.delta.dy / _height;
     if (_center) return;
-    if (!_readingBrightness) _apply();
+    if (!_readingBrightness && !_readingVolume) _apply();
   }
 
   void _apply() {
@@ -192,6 +231,9 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
         _pendingBrightness = value;
         unawaited(_writeBrightness());
       }
+    } else if (_nativeVolume) {
+      _pendingVolume = value;
+      unawaited(_writeVolume());
     } else {
       final drag = _drag;
       unawaited(
@@ -201,6 +243,25 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
           }
         }),
       );
+    }
+  }
+
+  Future<void> _writeVolume() async {
+    if (_writingVolume) return;
+    _writingVolume = true;
+    try {
+      while (_pendingVolume != null) {
+        final value = _pendingVolume;
+        _pendingVolume = null;
+        if (value != null) await _volumeService.set(value);
+      }
+    } catch (_) {
+      _pendingVolume = null;
+      if (mounted && _enabled) {
+        setState(() => _feedback = '音量调节失败');
+      }
+    } finally {
+      _writingVolume = false;
     }
   }
 
@@ -240,7 +301,7 @@ class _PlayerSwipeControlsState extends State<PlayerSwipeControls>
       return;
     }
     _released = true;
-    if (!_readingBrightness) {
+    if (!_readingBrightness && !_readingVolume) {
       _drag = null;
       _hideFeedback();
     }
