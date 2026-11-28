@@ -203,7 +203,7 @@ class _LiveStreamPickerState extends ConsumerState<LiveStreamPicker> {
                       ],
                     ),
                     _heading('2', '直播流'),
-                    const Text('H.264 兼容性较好；HEVC / AV1 可尝试节省带宽，实际解码效果取决于设备。'),
+                    const Text('iPad 仅播放 HLS 线路；H.264 兼容性最好，HEVC 可节省带宽。'),
                     const SizedBox(height: 10),
                     Wrap(
                       spacing: 8,
