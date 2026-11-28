@@ -421,6 +421,31 @@ final class ApplePlayerSession: NSObject {
     item.preferredForwardBufferDuration = 0
   }
 
+  private func makeAsset(
+    _ url: URL,
+    headers: [String: String],
+    mime: String
+  ) -> AVURLAsset {
+    if url.isFileURL {
+      return AVURLAsset(url: url)
+    }
+    var options: [String: Any] = [:]
+    if !headers.isEmpty {
+      // TrollStore sideloading path: AVFoundation's documented header option
+      // is unavailable, so use the widely deployed asset option.
+      options["AVURLAssetHTTPHeaderFieldsKey"] = headers
+    }
+    // Bilibili serves DASH tracks as `.m4s`, which AVFoundation does not map
+    // to a container on its own. The out-of-band MIME option uses the same
+    // string value as the AVFoundation constant, which is not exposed to Swift
+    // on iOS.
+    let ext = url.pathExtension.lowercased()
+    if ext == "m4s" || ext.isEmpty {
+      options["AVURLAssetOutOfBandMIMETypeKey"] = mime
+    }
+    return AVURLAsset(url: url, options: options)
+  }
+
   private func ensureAudioPlayer() -> AVPlayer {
     if let audioPlayer { return audioPlayer }
     let audio = AVPlayer()
