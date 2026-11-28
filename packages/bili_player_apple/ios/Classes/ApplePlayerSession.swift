@@ -276,8 +276,7 @@ final class ApplePlayerSession: NSObject {
     if let observed = accessLog?.observedBitrate, observed > 0 {
       info["videoBitrate"] = observed / 1000
     }
-    if let raw = videoTrack?.formatDescriptions.first,
-       let format = raw as? CMFormatDescription {
+    if let format = videoTrack?.formatDescriptions.first {
       if let primaries = stringExtension(
         format,
         kCMFormatDescriptionExtension_ColorPrimaries
@@ -390,8 +389,8 @@ final class ApplePlayerSession: NSObject {
     bufferAheadMs: Double,
     completion: @escaping (Result<AVPlayerItem, Error>) -> Void
   ) {
-    let videoAsset = makeAsset(videoURL, headers: headers, mime: audioOnly ? "audio/mp4" : nil)
-    let audioAsset = audioURL.map { makeAsset($0, headers: headers, mime: "audio/mp4") }
+    let videoAsset = makeAsset(videoURL, headers: headers)
+    let audioAsset = audioURL.map { makeAsset($0, headers: headers) }
     let keys = ["playable", "duration", "tracks"]
     load(videoAsset, keys: keys) { [weak self] videoError in
       guard let self else { return }
@@ -427,8 +426,7 @@ final class ApplePlayerSession: NSObject {
 
   private func makeAsset(
     _ url: URL,
-    headers: [String: String],
-    mime: String?
+    headers: [String: String]
   ) -> AVURLAsset {
     if url.isFileURL {
       return AVURLAsset(url: url)
@@ -439,9 +437,6 @@ final class ApplePlayerSession: NSObject {
       // is unavailable, so use the widely deployed asset option. No request
       // data leaves this process except to the media host.
       options["AVURLAssetHTTPHeaderFieldsKey"] = headers
-    }
-    if let mime, url.pathExtension.isEmpty {
-      options[AVURLAssetOutOfBandMIMETypeKey] = mime
     }
     return AVURLAsset(url: url, options: options)
   }
@@ -544,7 +539,7 @@ final class ApplePlayerSession: NSObject {
         to: CMTime(value: CMTimeValue(startPositionMs), timescale: 1000),
         toleranceBefore: .zero,
         toleranceAfter: .zero,
-        completionHandler: nil
+        completionHandler: { _ in }
       )
     }
     if item.status == .readyToPlay {
@@ -850,9 +845,7 @@ final class ApplePlayerSession: NSObject {
   }
 
   private func codecName(_ track: AVAssetTrack) -> String? {
-    guard let raw = track.formatDescriptions.first,
-          let format = raw as? CMFormatDescription
-    else { return nil }
+    guard let format = track.formatDescriptions.first else { return nil }
     let code = CMFormatDescriptionGetMediaSubType(format)
     let bytes: [UInt8] = [
       UInt8((code >> 24) & 0xff),
@@ -876,7 +869,7 @@ final class ApplePlayerSession: NSObject {
   }
 
   private func audioDescription(_ track: AVAssetTrack) -> (channels: Int, sampleRate: Int)? {
-    guard let format = track.formatDescriptions.first as? CMAudioFormatDescription,
+    guard let format = track.formatDescriptions.first,
           let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)
     else { return nil }
     return (

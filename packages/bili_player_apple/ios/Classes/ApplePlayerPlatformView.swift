@@ -9,7 +9,7 @@ final class ApplePlayerSurfaceFactory: NSObject, FlutterPlatformViewFactory {
     self.host = host
   }
 
-  func createArgsCodec() -> (FlutterMessageCodec & NSObjectProtocol)? {
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
     FlutterStandardMessageCodec.sharedInstance()
   }
 
