@@ -12,9 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   for (final (protocol, format, codec) in [
-    ('http_stream', 'flv', 'avc'),
+    ('http_hls', 'fmp4', 'avc'),
     ('http_hls', 'fmp4', 'hevc'),
-    ('http_hls', 'ts', 'av1'),
   ]) {
     test(
       'selects and retains live combination $protocol/$format/$codec',
@@ -43,13 +42,8 @@ void main() {
         );
         expect(media.liveStream, preference);
         expect(media.video.codec, codec);
-        expect(media.liveStreams.length, 5);
-        expect(
-          media.kind,
-          format == 'flv'
-              ? PlaybackMediaKind.liveFlv
-              : PlaybackMediaKind.liveHls,
-        );
+        expect(media.liveStreams.length, 2);
+        expect(media.kind, PlaybackMediaKind.liveHls);
         final fallback = await repository.resolveLive(
           const LivePlaybackTarget('8'),
           quality: 400,
@@ -60,42 +54,39 @@ void main() {
           ),
           cancellation: RequestCancellation(),
         );
-        expect(fallback.liveStream?.format, 'flv');
-        expect(fallback.liveStream?.codec, 'hevc');
+        expect(fallback.liveStream?.format, 'fmp4');
+        expect(fallback.liveStream?.codec, 'avc');
       },
     );
   }
-  test(
-    'unavailable HLS preference keeps the deepest available match',
-    () async {
-      final requests = ApiRequests();
-      final api = BiliApiClient(
-        transport: _Transport(),
-        sessionProvider: requests,
+  test('FLV and AV1 live lines are filtered out', () async {
+    final requests = ApiRequests();
+    final api = BiliApiClient(
+      transport: _Transport(),
+      sessionProvider: requests,
+    );
+    addTearDown(api.close);
+    final repository = ApiContentPlaybackRepository(
+      PgcClient(api),
+      LiveClient(api),
+      requests,
+    );
+    for (final (format, codec) in [('fmp4', 'av1'), ('absent', 'hevc')]) {
+      final media = await repository.resolveLive(
+        const LivePlaybackTarget('8'),
+        quality: 400,
+        preference: LiveStreamPreference(
+          protocol: 'http_hls',
+          format: format,
+          codec: codec,
+        ),
+        cancellation: RequestCancellation(),
       );
-      addTearDown(api.close);
-      final repository = ApiContentPlaybackRepository(
-        PgcClient(api),
-        LiveClient(api),
-        requests,
-      );
-      for (final (format, codec) in [('fmp4', 'av1'), ('absent', 'hevc')]) {
-        final media = await repository.resolveLive(
-          const LivePlaybackTarget('8'),
-          quality: 400,
-          preference: LiveStreamPreference(
-            protocol: 'http_hls',
-            format: format,
-            codec: codec,
-          ),
-          cancellation: RequestCancellation(),
-        );
-        expect(media.liveStream?.protocol, 'http_hls');
-        expect(media.liveStream?.format, format == 'fmp4' ? 'fmp4' : 'ts');
-        expect(media.video.codec, format == 'fmp4' ? 'avc' : 'av1');
-      }
-    },
-  );
+      expect(media.liveStream?.protocol, 'http_hls');
+      expect(media.liveStream?.format, 'fmp4');
+      expect(media.video.codec, 'avc');
+    }
+  });
   for (final (quality, hlsFirst) in [(0, false), (400, true), (10000, false)]) {
     test(
       'automatic live playback follows server stream and line order: qn=$quality hlsFirst=$hlsFirst',
@@ -120,14 +111,11 @@ void main() {
         );
         expect(transport.request?.queryParameters['qn'], '$quality');
         expect(media.liveStreams.first.preference, media.liveStream);
-        expect(media.liveStream?.format, hlsFirst ? 'ts' : 'flv');
-        expect(
-          media.kind,
-          hlsFirst ? PlaybackMediaKind.liveHls : PlaybackMediaKind.liveFlv,
-        );
-        expect(media.video.codec, hlsFirst ? 'av1' : 'hevc');
+        expect(media.liveStream?.format, 'fmp4');
+        expect(media.kind, PlaybackMediaKind.liveHls);
+        expect(media.video.codec, 'avc');
         expect(media.quality, quality == 0 ? 250 : quality);
-        expect(media.qualities, [if (!hlsFirst) 20000, 10000, 400, 250]);
+        expect(media.qualities, [10000, 400, 250]);
         expect(media.qualityLabels[400], '1080P 蓝光');
         expect(media.video.urls.map((uri) => uri.host), [
           'primary.example',

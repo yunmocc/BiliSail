@@ -29,7 +29,10 @@ void main() {
       },
     );
   }
-  for (final codec in VideoCodecPreference.values.take(3)) {
+  for (final codec in const [
+    VideoCodecPreference.h264,
+    VideoCodecPreference.hevc,
+  ]) {
     test('1080P60 discovers the ladder before selecting $codec', () async {
       final transport = _Transport();
       final repository = _repository(transport);
@@ -47,6 +50,19 @@ void main() {
       expect(media.audio?.codec, 'mp4a.40.2');
     });
   }
+  test('an AV1 preference falls back to a decodable codec', () async {
+    final media = await _repository(_Transport()).resolve(
+      const VideoId('BV1VNxr63EZp'),
+      '43202641987',
+      quality: 116,
+      preferredCodec: VideoCodecPreference.av1,
+      cancellation: RequestCancellation(),
+    );
+    expect(
+      VideoCodecPreference.fromCodec(media.video.codec),
+      VideoCodecPreference.h264,
+    );
+  });
 
   test(
     'supplements a missing lower quality without losing the upper ladder',

@@ -407,7 +407,6 @@ void main() {
   for (final (preference, codec) in const [
     (VideoCodecPreference.h264, 'avc1.640028'),
     (VideoCodecPreference.hevc, 'hev1.1.6.L120'),
-    (VideoCodecPreference.av1, 'av01.0.08M.08'),
   ]) {
     test(
       'selects $preference at the requested quality and retains DASH audio',
@@ -427,24 +426,23 @@ void main() {
       },
     );
   }
-  test(
-    'quality is preserved when the preferred codec only exists lower down',
-    () {
-      final media = select([
-        _track(32, 'av01.0.08M.08'),
-        _track(80, 'hvc1.1.6.L120'),
-        _track(80, 'AVC1.640028'),
-        _track(120, 'av01.0.08M.08'),
-      ], preferred: VideoCodecPreference.av1);
-      expect(media.quality, 80);
-      expect(media.video.codec, 'AVC1.640028');
-      expect(media.qualities, [32, 80, 120]);
-    },
-  );
-  test('HEVC-only and AV1-only sources remain usable without H.264', () {
-    for (final codec in ['hev1.1.6.L120', 'av01.0.08M.08']) {
-      expect(select([_track(80, codec)]).video.codec, codec);
-    }
+  test('AV1-only tracks are skipped and the best decodable quality wins', () {
+    final media = select([
+      _track(32, 'av01.0.08M.08'),
+      _track(80, 'hvc1.1.6.L120'),
+      _track(80, 'AVC1.640028'),
+      _track(120, 'av01.0.08M.08'),
+    ], preferred: VideoCodecPreference.av1);
+    expect(media.quality, 80);
+    expect(media.video.codec, 'AVC1.640028');
+    expect(media.qualities, [80]);
+  });
+  test('AV1-only sources are rejected before reaching AVPlayer', () {
+    expect(
+      () => select([_track(80, 'av01.0.08M.08')]),
+      throwsA(isA<AppFailure>()),
+    );
+    expect(select([_track(80, 'hev1.1.6.L120')]).video.codec, 'hev1.1.6.L120');
   });
   test('unsupported quality uses nearest lower or minimum server quality', () {
     final tracks = [_track(32, 'avc1'), _track(80, 'avc1')];

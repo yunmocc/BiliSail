@@ -1357,7 +1357,7 @@ void main() {
       resumePlayback: false,
       showCollapsedProgress: false,
       preferredQuality: 120,
-      preferredVideoCodec: VideoCodecPreference.av1,
+      preferredVideoCodec: VideoCodecPreference.h264,
       videoDecoding: VideoDecodingPreference.software,
       defaultPlaybackRate: 1.5,
       defaultVolume: 35,
@@ -1407,7 +1407,7 @@ void main() {
     expect(reloaded.danmakuMinimumWeight, 5);
     expect(reloaded.danmakuOffset, const Duration(milliseconds: -1500));
     expect(reloaded.danmakuMaxOnScreen, 12);
-    expect(reloaded.preferredVideoCodec, VideoCodecPreference.av1);
+    expect(reloaded.preferredVideoCodec, VideoCodecPreference.h264);
     expect(reloaded.videoDecoding, VideoDecodingPreference.software);
     expect(reloaded.font, AppFontPreference.system);
     expect(reloaded.cacheImages, isFalse);

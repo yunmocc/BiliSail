@@ -1770,9 +1770,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
-  testWidgets('codec and decoding choices save in a narrow playback page', (
-    tester,
-  ) async {
+  testWidgets('codec choices save in a narrow playback page', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(400, 900);
     addTearDown(() {
@@ -1793,7 +1791,7 @@ void main() {
     await tester.pumpAndSettle();
     for (final (label, codec) in const [
       ('H.265 / HEVC', VideoCodecPreference.hevc),
-      ('AV1', VideoCodecPreference.av1),
+      ('杜比视界 / dvh1', VideoCodecPreference.dolbyVision),
     ]) {
       final choice = find.widgetWithText(ChoiceChip, label);
       await tester.ensureVisible(choice);
@@ -1803,13 +1801,6 @@ void main() {
       expect(repository.settings.preferredVideoCodec, codec);
       expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
     }
-    final software = find.widgetWithText(ChoiceChip, '软件解码');
-    await tester.ensureVisible(software);
-    await tester.pumpAndSettle();
-    await tester.tap(software);
-    await tester.pumpAndSettle();
-    expect(repository.settings.videoDecoding, VideoDecodingPreference.software);
-    expect(tester.widget<ChoiceChip>(software).selected, isTrue);
     expect(tester.takeException(), isNull);
   });
 
