@@ -616,10 +616,16 @@ final class ApplePlayerSession: NSObject {
         DispatchQueue.main.async {
           self.updateBuffering()
           let playing = self.player.timeControlStatus == .playing
+          if !playing {
+            // Keep the audio clock with the video clock: never let sound run
+            // while the picture is waiting for data.
+            self.audioPlayer?.pause()
+          }
           if self.lastPlaying != playing {
             self.lastPlaying = playing
             self.send(["event": "playing", "value": playing, "generation": self.generation])
           }
+          if playing { self.syncAudio() }
         }
       },
     ]
