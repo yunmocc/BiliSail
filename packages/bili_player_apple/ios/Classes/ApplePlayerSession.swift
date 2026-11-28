@@ -32,6 +32,7 @@ final class ApplePlayerSession: NSObject {
   private var storedGainDb: Double = 0
   private var volumeLevel: Float = 1
   private var muted = false
+  private var live = false
   private var sourceKind = "progressive"
   private var externalAudio = false
   private var audioOnly = false
@@ -43,6 +44,16 @@ final class ApplePlayerSession: NSObject {
   private var frameOutput: AVPlayerItemVideoOutput?
   private var currentAudioURL: URL?
   private var disposed = false
+  private var headers: [String: String] = [:]
+  private var videoCandidates: [URL] = []
+  private var videoCandidateIndex = 0
+  private var audioCandidates: [URL] = []
+  private var audioCandidateIndex = 0
+  private var videoSwitchWork: DispatchWorkItem?
+  private var audioSwitchWork: DispatchWorkItem?
+  private var pendingStartMs = 0
+  private var lastAudioSyncSeek = Date.distantPast
+  private static var audioSessionConfigured = false
 
   init(playerId: Int, playerLayer: AVPlayerLayer, host: ApplePlayerHost) {
     self.playerId = playerId
@@ -90,16 +101,21 @@ final class ApplePlayerSession: NSObject {
     let headers = (args["headers"] as? [String: String]) ?? [:]
     let muted = args["muted"] as? Bool ?? false
     let audioOnly = args["audioOnly"] as? Bool ?? false
+    let live = args["live"] as? Bool ?? false
     let startPositionMs = args["startPositionMs"] as? Int ?? 0
     let rate = args["rate"] as? Double ?? 1
     let volume = args["volume"] as? Double ?? 1
     let gainDb = args["gainDb"] as? Double ?? 0
     let timeoutMs = (args["timeoutMs"] as? NSNumber)?.doubleValue ?? 35000
+    let videoUrls = (args["videoUrls"] as? [String]) ?? [urlString]
+    let audioUrls = (args["audioUrls"] as? [String])
+      ?? (audioURL.map { [$0.absoluteString] } ?? [])
 
     resetItem()
     self.generation = generation
     self.openResult = result
     self.muted = muted
+    self.live = live
     self.sourceKind = kind
     self.audioOnly = audioOnly
     self.externalAudio = audioURL != nil
@@ -109,30 +125,23 @@ final class ApplePlayerSession: NSObject {
     self.currentAudioURL = audioURL
     self.audioReady = false
     self.openCompleted = false
-
-    let videoMime = audioOnly ? "audio/mp4" : "video/mp4"
-    let videoAsset = makeAsset(videoURL, headers: headers, mime: videoMime)
-    let videoItem = AVPlayerItem(asset: videoAsset)
-    configureItem(videoItem)
-    observeVideoItem(videoItem)
+    self.pendingStartMs = startPositionMs
+    self.headers = headers
+    self.videoCandidates = videoUrls.compactMap(URL.init(string:))
+    if self.videoCandidates.isEmpty { self.videoCandidates = [videoURL] }
+    self.audioCandidates = audioUrls.compactMap(URL.init(string:))
+    self.videoCandidateIndex = 0
+    self.audioCandidateIndex = 0
 
     player.isMuted = externalAudio || muted
     player.volume = externalAudio ? 0 : volumeLevel
-    player.replaceCurrentItem(with: videoItem)
-    if startPositionMs > 0 {
-      seekPlayers(toSeconds: Double(startPositionMs) / 1000, tolerance: 0.25)
-    }
+    startVideoCandidate(index: 0, seekMs: startPositionMs)
 
-    if let audioURL {
-      let audioAsset = makeAsset(audioURL, headers: headers, mime: "audio/mp4")
-      let audioItem = AVPlayerItem(asset: audioAsset)
-      configureItem(audioItem)
-      observeAudioItem(audioItem)
+    if audioURL != nil {
       let audio = ensureAudioPlayer()
       audio.isMuted = muted
       audio.volume = volumeLevel
-      audio.replaceCurrentItem(with: audioItem)
-      applyAudioGain()
+      startAudioCandidate(index: 0)
     }
 
     let work = DispatchWorkItem { [weak self] in
@@ -144,24 +153,16 @@ final class ApplePlayerSession: NSObject {
       deadline: .now() + max(effectiveTimeout / 1000, 1),
       execute: work
     )
-
-    if videoItem.status == .readyToPlay {
-      finishOpen(item: videoItem)
-    } else if videoItem.status == .failed {
-      failOpen(code: errorCode(videoItem.error), message: videoItem.error?.localizedDescription)
-    }
   }
 
   func play(rate: Double) {
     desiredRate = Float(max(rate, 0.1))
+    applyPitchAlgorithm()
+    markSteadyBuffer()
     player.play()
     player.rate = desiredRate
-    guard externalAudio, let audio = audioPlayer else { return }
-    if audio.currentItem?.status == .readyToPlay {
-      alignAudio(to: player.currentTime().seconds)
-    }
-    audio.play()
-    audio.rate = desiredRate
+    guard externalAudio else { return }
+    startAudioAligned()
   }
 
   func pause() {
@@ -171,6 +172,7 @@ final class ApplePlayerSession: NSObject {
 
   func setRate(_ rate: Double) {
     desiredRate = Float(max(rate, 0.1))
+    applyPitchAlgorithm()
     if player.timeControlStatus == .playing || player.rate > 0 {
       player.rate = desiredRate
     }
@@ -218,6 +220,7 @@ final class ApplePlayerSession: NSObject {
     }
     let target = CMTime(seconds: seconds, preferredTimescale: 600)
     let tolerance = CMTime(seconds: 0.25, preferredTimescale: 600)
+    pendingStartMs = safeMilliseconds(seconds)
     seekGeneration += 1
     let token = seekGeneration
     pendingSeekResult = result
@@ -400,11 +403,14 @@ final class ApplePlayerSession: NSObject {
   // MARK: - Item setup
 
   private func configureAudioSession() {
+    guard !Self.audioSessionConfigured else { return }
+    Self.audioSessionConfigured = true
     let session = AVAudioSession.sharedInstance()
     try? session.setCategory(.playback, mode: .moviePlayback, options: [])
   }
 
-  private func configurePlayer(_ player: AVPlayer) {    player.actionAtItemEnd = .pause
+  private func configurePlayer(_ player: AVPlayer) {
+    player.actionAtItemEnd = .pause
     // Start as soon as the first range is playable; buffering is surfaced to
     // the UI so the user never waits for a large forward buffer to fill.
     player.automaticallyWaitsToMinimizeStalling = false
@@ -414,8 +420,23 @@ final class ApplePlayerSession: NSObject {
   }
 
   private func configureItem(_ item: AVPlayerItem) {
-    item.audioTimePitchAlgorithm = .timeDomain
-    item.preferredForwardBufferDuration = 0
+    item.audioTimePitchAlgorithm = desiredRate > 1.05 ? .timeDomain : .spectral
+    // A shallow startup window keeps the first frame fast; markSteadyBuffer
+    // deepens it once the picture is on screen.
+    item.preferredForwardBufferDuration = 2
+  }
+
+  private func applyPitchAlgorithm() {
+    let algorithm: AVAudioTimePitchAlgorithm =
+      desiredRate > 1.05 ? .timeDomain : .spectral
+    player.currentItem?.audioTimePitchAlgorithm = algorithm
+    audioPlayer?.currentItem?.audioTimePitchAlgorithm = algorithm
+  }
+
+  private func markSteadyBuffer() {
+    guard !live else { return }
+    player.currentItem?.preferredForwardBufferDuration = 10
+    audioPlayer?.currentItem?.preferredForwardBufferDuration = 10
   }
 
   private func makeAsset(
@@ -454,23 +475,141 @@ final class ApplePlayerSession: NSObject {
     return audio
   }
 
+  private func startVideoCandidate(index: Int, seekMs: Int) {
+    guard index < videoCandidates.count else {
+      if openResult != nil {
+        failOpen(code: "nativePlayback", message: "所有视频线路均不可用")
+      } else {
+        sendFailure(code: "nativePlayback")
+      }
+      return
+    }
+    videoSwitchWork?.cancel()
+    videoSwitchWork = nil
+    videoCandidateIndex = index
+    let item = AVPlayerItem(asset: makeAsset(
+      videoCandidates[index],
+      headers: headers,
+      mime: audioOnly ? "audio/mp4" : "video/mp4"
+    ))
+    configureItem(item)
+    if openCompleted {
+      item.preferredForwardBufferDuration = live ? 2 : 10
+    }
+    observeVideoItem(item)
+    player.replaceCurrentItem(with: item)
+    if seekMs > 0 {
+      let target = CMTime(value: CMTimeValue(seekMs), timescale: 1000)
+      let tolerance = CMTime(seconds: 0.25, preferredTimescale: 600)
+      player.seek(
+        to: target,
+        toleranceBefore: tolerance,
+        toleranceAfter: tolerance,
+        completionHandler: { _ in }
+      )
+    }
+    if openCompleted, lastPlaying == true {
+      player.play()
+      player.rate = desiredRate
+    }
+    let work = DispatchWorkItem { [weak self] in
+      guard let self,
+            self.videoCandidateIndex == index,
+            !self.openCompleted,
+            item.status != .readyToPlay else { return }
+      self.advanceVideoCandidate()
+    }
+    videoSwitchWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: work)
+    if item.status == .readyToPlay {
+      finishOpen(item: item)
+    } else if item.status == .failed {
+      advanceVideoCandidate()
+    }
+  }
+
+  private func advanceVideoCandidate() {
+    videoSwitchWork?.cancel()
+    videoSwitchWork = nil
+    let next = videoCandidateIndex + 1
+    guard next < videoCandidates.count else {
+      if openResult != nil {
+        failOpen(code: "nativePlayback", message: "所有视频线路均不可用")
+      } else {
+        sendFailure(code: "nativePlayback")
+      }
+      return
+    }
+    let resume = openCompleted ? currentMilliseconds() : pendingStartMs
+    startVideoCandidate(index: next, seekMs: resume)
+  }
+
+  private func startAudioCandidate(index: Int) {
+    guard externalAudio, index < audioCandidates.count else {
+      if externalAudio { sendFailure(code: "nativePlayback") }
+      return
+    }
+    audioSwitchWork?.cancel()
+    audioSwitchWork = nil
+    audioCandidateIndex = index
+    let item = AVPlayerItem(asset: makeAsset(
+      audioCandidates[index],
+      headers: headers,
+      mime: "audio/mp4"
+    ))
+    configureItem(item)
+    audioReady = false
+    let audio = ensureAudioPlayer()
+    audio.isMuted = muted
+    audio.volume = volumeLevel
+    audio.replaceCurrentItem(with: item)
+    observeAudioItem(item)
+    applyAudioGain()
+    if openCompleted, lastPlaying == true {
+      audio.play()
+      audio.rate = desiredRate
+    }
+    let work = DispatchWorkItem { [weak self] in
+      guard let self,
+            self.audioCandidateIndex == index,
+            !self.audioReady,
+            item.status != .readyToPlay else { return }
+      self.advanceAudioCandidate()
+    }
+    audioSwitchWork = work
+    DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: work)
+  }
+
+  private func advanceAudioCandidate() {
+    audioSwitchWork?.cancel()
+    audioSwitchWork = nil
+    let next = audioCandidateIndex + 1
+    guard next < audioCandidates.count else {
+      sendFailure(code: "nativePlayback")
+      return
+    }
+    startAudioCandidate(index: next)
+  }
+
   private func observeVideoItem(_ item: AVPlayerItem) {
     itemObservers.forEach { $0.invalidate() }
     itemObservers = [
       item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
         guard let self else { return }
         DispatchQueue.main.async {
+          guard item === self.player.currentItem else { return }
           if item.status == .readyToPlay {
-            self.finishOpen(item: item)
-          } else if item.status == .failed {
-            if self.openResult != nil {
-              self.failOpen(
-                code: self.errorCode(item.error),
-                message: item.error?.localizedDescription
-              )
+            if self.openCompleted {
+              self.videoSwitchWork?.cancel()
+              self.videoSwitchWork = nil
+              if !self.live {
+                item.preferredForwardBufferDuration = 10
+              }
             } else {
-              self.sendFailure(code: self.errorCode(item.error))
+              self.finishOpen(item: item)
             }
+          } else if item.status == .failed {
+            self.advanceVideoCandidate()
           }
         }
       },
@@ -499,10 +638,13 @@ final class ApplePlayerSession: NSObject {
       item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
         guard let self else { return }
         DispatchQueue.main.async {
+          guard item === self.audioPlayer?.currentItem else { return }
           if item.status == .readyToPlay {
+            self.audioSwitchWork?.cancel()
+            self.audioSwitchWork = nil
             self.audioDidBecomeReady()
           } else if item.status == .failed {
-            self.sendFailure(code: self.errorCode(item.error))
+            self.advanceAudioCandidate()
           }
         }
       },
@@ -512,17 +654,21 @@ final class ApplePlayerSession: NSObject {
   private func audioDidBecomeReady() {
     audioReady = true
     applyAudioGain()
-    guard let audio = audioPlayer else { return }
     if player.timeControlStatus == .playing || player.rate > 0 {
-      alignAudio(to: player.currentTime().seconds)
-      audio.play()
-      audio.rate = desiredRate
+      startAudioAligned()
     }
   }
 
   private func finishOpen(item: AVPlayerItem) {
-    guard openResult != nil, !openCompleted else { return }
+    guard openResult != nil, !openCompleted, item === player.currentItem else {
+      return
+    }
     openCompleted = true
+    videoSwitchWork?.cancel()
+    videoSwitchWork = nil
+    if player.timeControlStatus == .playing || player.rate > 0 {
+      markSteadyBuffer()
+    }
     let (width, height) = dimensions()
     let duration = validSeconds(item.duration)
     let audioTracks = item.asset.tracks(withMediaType: .audio)
@@ -575,6 +721,10 @@ final class ApplePlayerSession: NSObject {
   private func resetItem() {
     openTimeout?.cancel()
     openTimeout = nil
+    videoSwitchWork?.cancel()
+    videoSwitchWork = nil
+    audioSwitchWork?.cancel()
+    audioSwitchWork = nil
     if let callback = openResult {
       openResult = nil
       callback(FlutterError(code: "cancelled", message: "播放源已替换", details: nil))
@@ -601,6 +751,14 @@ final class ApplePlayerSession: NSObject {
     frameOutput = nil
     currentAudioURL = nil
     generation = -1
+    live = false
+    headers = [:]
+    videoCandidates = []
+    audioCandidates = []
+    videoCandidateIndex = 0
+    audioCandidateIndex = 0
+    pendingStartMs = 0
+    lastAudioSyncSeek = Date.distantPast
     player.pause()
     player.replaceCurrentItem(with: nil)
     audioPlayer?.pause()
@@ -712,6 +870,7 @@ final class ApplePlayerSession: NSObject {
   private func markFirstFrame() {
     guard !firstFrameSent, generation >= 0 else { return }
     firstFrameSent = true
+    markSteadyBuffer()
     send(["event": "firstFrame", "generation": generation])
   }
 
@@ -755,81 +914,73 @@ final class ApplePlayerSession: NSObject {
 
   // MARK: - Audio/video synchronisation
 
-  private func seekPlayers(toSeconds seconds: Double, tolerance: Double) {
-    guard seconds > 0 else { return }
-    let target = CMTime(seconds: seconds, preferredTimescale: 600)
-    let tol = CMTime(seconds: tolerance, preferredTimescale: 600)
-    player.seek(
-      to: target,
-      toleranceBefore: tol,
-      toleranceAfter: tol,
-      completionHandler: { _ in }
-    )
-    if externalAudio,
-       let audio = audioPlayer,
-       audio.currentItem?.status == .readyToPlay {
+  /// Aligns the external audio to the video clock once, then starts it.
+  private func startAudioAligned() {
+    guard let audio = audioPlayer,
+          let item = audio.currentItem,
+          item.status == .readyToPlay else {
+      audioPlayer?.play()
+      audioPlayer?.rate = desiredRate
+      return
+    }
+    let target = player.currentTime()
+    let targetSeconds = target.seconds
+    let audioSeconds = audio.currentTime().seconds
+    if targetSeconds.isFinite,
+       (!audioSeconds.isFinite || abs(audioSeconds - targetSeconds) > 0.12) {
+      let tolerance = CMTime(seconds: 0.1, preferredTimescale: 600)
       audio.seek(
         to: target,
-        toleranceBefore: tol,
-        toleranceAfter: tol,
-        completionHandler: { _ in }
-      )
+        toleranceBefore: tolerance,
+        toleranceAfter: tolerance
+      ) { [weak self] _ in
+        guard let self, let audio = self.audioPlayer else { return }
+        if self.player.timeControlStatus == .playing || self.player.rate > 0 {
+          audio.play()
+          audio.rate = self.desiredRate
+        }
+      }
+      return
     }
+    audio.play()
+    audio.rate = desiredRate
   }
 
-  /// Starts the external audio player at the video clock position.
-  private func alignAudio(to videoSeconds: Double) {
-    guard externalAudio,
-          let audio = audioPlayer,
-          audio.currentItem?.status == .readyToPlay,
-          videoSeconds.isFinite,
-          videoSeconds > 0 else { return }
-    let audioSeconds = audio.currentTime().seconds
-    guard !audioSeconds.isFinite || abs(audioSeconds - videoSeconds) > 0.12 else { return }
-    audio.seek(
-      to: CMTime(seconds: videoSeconds, preferredTimescale: 600),
-      toleranceBefore: CMTime(seconds: 0.1, preferredTimescale: 600),
-      toleranceAfter: CMTime(seconds: 0.1, preferredTimescale: 600),
-      completionHandler: { _ in }
-    )
-  }
-
-  /// The video player is the clock. Audio is nudged by a few percent or seeks
-  /// only when drift becomes noticeable.
+  /// The video player is the clock. The audio rate is never altered for sync;
+  /// a rare seek corrects drift, so playback keeps its natural pitch.
   private func syncAudio() {
     guard externalAudio,
           let audio = audioPlayer,
           audioReady,
           audio.currentItem?.status == .readyToPlay else { return }
-    let videoStatus = player.timeControlStatus
-    if videoStatus != .playing {
+    if player.timeControlStatus != .playing {
       if audio.rate != 0 { audio.pause() }
       return
     }
     if audio.timeControlStatus != .playing {
       if audio.timeControlStatus == .waitingToPlayAtSpecifiedRate {
-        // Do not seek a stream that is still filling its first buffer.
         audio.play()
         audio.rate = desiredRate
         return
       }
-      alignAudio(to: player.currentTime().seconds)
-      audio.play()
-      audio.rate = desiredRate
+      startAudioAligned()
       return
     }
     let videoSeconds = player.currentTime().seconds
     let audioSeconds = audio.currentTime().seconds
     guard videoSeconds.isFinite, audioSeconds.isFinite else { return }
     let drift = videoSeconds - audioSeconds
-    if abs(drift) > 0.6 {
-      alignAudio(to: videoSeconds)
-      audio.rate = desiredRate
-    } else if abs(drift) > 0.08 {
-      audio.rate = desiredRate + (drift > 0 ? 0.02 : -0.02)
-    } else if abs(audio.rate - desiredRate) > 0.001 {
-      audio.rate = desiredRate
-    }
+    guard abs(drift) > 0.3,
+          Date().timeIntervalSince(lastAudioSyncSeek) > 2 else { return }
+    lastAudioSyncSeek = Date()
+    let target = player.currentTime()
+    let tolerance = CMTime(seconds: 0.15, preferredTimescale: 600)
+    audio.seek(
+      to: target,
+      toleranceBefore: tolerance,
+      toleranceAfter: tolerance,
+      completionHandler: { _ in }
+    )
   }
 
   // MARK: - Helpers

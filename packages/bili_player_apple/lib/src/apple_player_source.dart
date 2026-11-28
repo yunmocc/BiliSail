@@ -75,12 +75,19 @@ Map<String, Object?> applePlayerOpenPayload({
     ManifestSource() => 'manifest',
     ProgressiveSource() => 'progressive',
   };
+  final videoUrls = [plan.media.uri, ...plan.media.alternates];
+  final audioUrls = audio == null
+      ? const <Uri>[]
+      : [audio.uri, ...audio.alternates];
   return {
     'playerId': playerId,
     'generation': generation,
     'kind': kind,
     'videoUrl': plan.media.uri.toString(),
+    'videoUrls': [for (final uri in videoUrls) uri.toString()],
     if (audio != null) 'audioUrl': audio.uri.toString(),
+    if (audioUrls.isNotEmpty)
+      'audioUrls': [for (final uri in audioUrls) uri.toString()],
     'headers': plan.media.requestPolicy.headers,
     'startPositionMs': plan.options.startPosition.inMilliseconds,
     'rate': plan.options.rate,

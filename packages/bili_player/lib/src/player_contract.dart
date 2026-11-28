@@ -12,6 +12,7 @@ final class MediaTrack {
   const MediaTrack({
     required this.uri,
     required this.requestPolicy,
+    this.alternates = const [],
     this.codec,
     this.embeddedAudioCodec,
     this.bandwidth,
@@ -19,6 +20,10 @@ final class MediaTrack {
   });
 
   final Uri uri;
+
+  /// Ordered fallback mirrors for the same bytes. The first entry is preferred;
+  /// backends may switch only when it fails or does not become ready in time.
+  final List<Uri> alternates;
   final MediaRequestPolicy requestPolicy;
   final String? codec;
 

@@ -12,10 +12,15 @@ import '../domain/playback_repository.dart';
 }) {
   final policy = MediaRequestPolicy(headers: resolved.headers);
   final audio = resolved.audio;
-  final audioUri = audio?.urls.firstOrNull;
+  final audioUris = audio?.urls ?? const <Uri>[];
+  final audioUri = audioUris.firstOrNull;
   final audioTrack = audio != null && audioUri != null
       ? MediaTrack(
           uri: audioUri,
+          alternates: List.unmodifiable([
+            for (final uri in audioUris)
+              if (uri != audioUri) uri,
+          ]),
           requestPolicy: policy,
           codec: audio.codec,
           bandwidth: audio.bandwidth,
@@ -49,6 +54,10 @@ import '../domain/playback_repository.dart';
       : 0;
   final video = MediaTrack(
     uri: resolved.video.urls[liveLineIndex],
+    alternates: List.unmodifiable([
+      for (var index = 0; index < resolved.video.urls.length; index++)
+        if (index != liveLineIndex) resolved.video.urls[index],
+    ]),
     requestPolicy: policy,
     codec: resolved.video.codec,
     embeddedAudioCodec: resolved.video.embeddedAudioCodec,
