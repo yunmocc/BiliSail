@@ -19,27 +19,29 @@ final class ApplePlayerBackend
     final channel = ApplePlayerChannel(playerId);
     output.bindChannel(channel);
     return ApplePlayerBackend._(
-      playerId: playerId,
-      channel: channel,
+      playerId,
+      channel,
       videoOutput: output,
       snapshot: snapshot,
       onDiagnostic: onDiagnostic,
     );
   }
 
-  ApplePlayerBackend._({
-    required this.playerId,
-    required ApplePlayerChannel channel,
+  ApplePlayerBackend._(
+    this.playerId,
+    this._channel, {
     required this.videoOutput,
     required this.snapshot,
     required this.onDiagnostic,
-  }) : _channel = channel {
+  }) {
     _initial = _initialize();
   }
 
   static int _nextPlayerId = 1;
 
   final int playerId;
+
+  @override
   final ApplePlayerVideoOutput videoOutput;
   final PlaybackSnapshot Function() snapshot;
   final void Function(PlayerDiagnosticEvent)? onDiagnostic;
@@ -232,10 +234,7 @@ final class ApplePlayerBackend
   }
 
   @override
-  Future<Duration> seekTo(
-    Duration target,
-    PlaybackOperation operation,
-  ) async {
+  Future<Duration> seekTo(Duration target, PlaybackOperation operation) async {
     if (_disposed) {
       throw PlayerFailure(
         PlayerFailureKind.disposed,
@@ -393,10 +392,7 @@ final class ApplePlayerBackend
         );
       case 'playing':
         _emit(
-          BackendEvent(
-            BackendEventKind.playing,
-            value: event['value'] == true,
-          ),
+          BackendEvent(BackendEventKind.playing, value: event['value'] == true),
         );
       case 'firstFrame':
         _framePresented = true;

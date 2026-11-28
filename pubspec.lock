@@ -93,6 +93,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  bili_player_apple:
+    dependency: "direct main"
+    description:
+      path: "packages/bili_player_apple"
+      relative: true
+    source: path
+    version: "0.1.0"
   boolean_selector:
     dependency: transitive
     description:
@@ -483,14 +490,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
-  image:
-    dependency: transitive
-    description:
-      name: image
-      sha256: bc13f61f0f5cb77936e78ae5dae3800f442718dac5d2bc4654f03c239230ed0c
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.13.1"
   image_picker:
     dependency: "direct main"
     description:
@@ -688,24 +687,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.11.0"
-  media_kit:
-    dependency: "direct overridden"
-    description:
-      path: media_kit
-      ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
-      resolved-ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
-      url: "https://github.com/CKopoer/media-kit.git"
-    source: git
-    version: "1.1.11"
-  media_kit_video:
-    dependency: "direct overridden"
-    description:
-      path: media_kit_video
-      ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
-      resolved-ref: e9ddc64d735b6f0ca9011fe8202fc0e7a6b45eb5
-      url: "https://github.com/CKopoer/media-kit.git"
-    source: git
-    version: "1.2.5"
   meta:
     dependency: transitive
     description:
@@ -930,14 +911,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.28.0"
-  safe_local_storage:
-    dependency: transitive
-    description:
-      name: safe_local_storage
-      sha256: "76288b689a3e1fddccb377177feed85d73fdfc64c9c3c52991e2d9aba35c4857"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.7"
   screen_retriever:
     dependency: transitive
     description:
@@ -1126,22 +1099,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
-  universal_platform:
-    dependency: transitive
-    description:
-      name: universal_platform
-      sha256: "64e16458a0ea9b99260ceb5467a214c1f298d647c659af1bff6d3bf82536b1ec"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.1.0"
-  uri_parser:
-    dependency: transitive
-    description:
-      name: uri_parser
-      sha256: "051c62e5f693de98ca9f130ee707f8916e2266945565926be3ff20659f7853ce"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.0.2"
   url_launcher:
     dependency: "direct main"
     description:
@@ -1246,14 +1203,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.8.1"
-  wakelock_plus_ohos:
-    dependency: transitive
-    description:
-      name: wakelock_plus_ohos
-      sha256: b22af297411555b5ec0fe43ec2960cd5f019dd23b83853214ebe6dcc97b337bd
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.3"
   wakelock_plus_platform_interface:
     dependency: transitive
     description:

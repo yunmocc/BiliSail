@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:bili_player/bili_player.dart';
@@ -13,7 +12,10 @@ import 'apple_player_channel.dart';
 /// One AVPlayerLayer-backed Flutter surface. The native layer is owned by the
 /// player session, not by this widget, so inline/fullscreen/mini can rebind it.
 final class ApplePlayerVideoOutput
-    implements FlutterVideoOutput, VideoFrameReadiness, NativeVideoFrameCapture {
+    implements
+        FlutterVideoOutput,
+        VideoFrameReadiness,
+        NativeVideoFrameCapture {
   ApplePlayerVideoOutput({required this.playerId});
 
   final int playerId;
@@ -91,15 +93,11 @@ final class ApplePlayerVideoOutput
     if (bytes is! Uint8List || width is! int || height is! int) return null;
     if (width <= 0 || height <= 0) return null;
     final completer = Completer<ui.Image?>();
-    ui.decodeImageFromPixels(
-      bytes,
-      width,
-      height,
-      ui.PixelFormat.bgra8888,
-      (image) {
-        if (!completer.isCompleted) completer.complete(image);
-      },
-    );
+    ui.decodeImageFromPixels(bytes, width, height, ui.PixelFormat.bgra8888, (
+      image,
+    ) {
+      if (!completer.isCompleted) completer.complete(image);
+    });
     return completer.future;
   }
 
