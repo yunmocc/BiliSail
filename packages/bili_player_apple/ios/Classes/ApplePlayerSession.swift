@@ -278,18 +278,24 @@ final class ApplePlayerSession: NSObject {
     }
     if let raw = videoTrack?.formatDescriptions.first,
        let format = raw as? CMFormatDescription {
-      info["colorPrimaries"] = stringExtension(
+      if let primaries = stringExtension(
         format,
         kCMFormatDescriptionExtension_ColorPrimaries
-      )
-      info["transferFunction"] = stringExtension(
+      ) {
+        info["colorPrimaries"] = primaries
+      }
+      if let transfer = stringExtension(
         format,
         kCMFormatDescriptionExtension_TransferFunction
-      )
-      info["colorMatrix"] = stringExtension(
+      ) {
+        info["transferFunction"] = transfer
+      }
+      if let matrix = stringExtension(
         format,
         kCMFormatDescriptionExtension_YCbCrMatrix
-      )
+      ) {
+        info["colorMatrix"] = matrix
+      }
     }
     return info
   }
@@ -609,7 +615,7 @@ final class ApplePlayerSession: NSObject {
     send([
       "event": "ready",
       "generation": generation,
-      "durationMs": info["durationMs"]!,
+      "durationMs": safeMilliseconds(duration),
       "width": width,
       "height": height,
       "hasVideo": hasVideo,
