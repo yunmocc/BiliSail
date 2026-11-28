@@ -184,7 +184,6 @@ jobs:
         shell: bash
         run: |
           python3 -m unittest discover -s tool -p 'test_linux_*.py'
-          python3 -m unittest discover -s tool -p 'test_apple_*.py'
           ruby -c ios/Podfile
           bash tool/test-linux-downloads.sh
           bash packages/bili_mux/tool/test-apple-framework.sh

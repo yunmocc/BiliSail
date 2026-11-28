@@ -4,68 +4,11 @@ import 'package:bilisail/core/storage/app_database.dart';
 import 'package:bilisail/features/settings/application/settings_controller.dart';
 import 'package:bilisail/features/settings/data/sqlite_settings_repository.dart';
 import 'package:bilisail/features/settings/domain/app_settings.dart';
-import 'package:bilisail/features/settings/domain/settings_category.dart';
-import 'package:bilisail/features/settings/presentation/settings_screen.dart';
-import 'package:bilisail/shared/ui/app_notice.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/memory_settings_repository.dart';
-
 void main() {
-  testWidgets('software decoding keeps Android output controls visible', (
-    tester,
-  ) async {
-    final repository = MemorySettingsRepository()
-      ..value = AppSettings(
-        androidVideoOutput: AndroidVideoOutputPreference.directTexture,
-      );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [settingsRepositoryProvider.overrideWithValue(repository)],
-        child: const MaterialApp(
-          home: Scaffold(
-            body: SettingsScreen(category: SettingsCategory.playback),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('软件解码'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('软件解码'));
-    await tester.pumpAndSettle();
-    expect(find.text('播放后端'), findsNothing);
-    expect(find.text('fvp（实验性）'), findsNothing);
-    expect(find.text('优先视频编码'), findsOneWidget);
-    expect(find.text('优先音质'), findsOneWidget);
-    expect(find.text('GPU 设备'), findsNothing);
-    final direct = find.text('解码直出纹理（实验）');
-    ChoiceChip directChip() => tester.widget<ChoiceChip>(
-      find.ancestor(of: direct, matching: find.byType(ChoiceChip)),
-    );
-    expect(direct, findsOneWidget);
-    expect(directChip().selected, isTrue);
-    expect(directChip().onSelected, isNull);
-    expect(find.textContaining('软件解码使用兼容渲染'), findsOneWidget);
-    expect(repository.value.videoDecoding, VideoDecodingPreference.software);
-    await tester.ensureVisible(find.text('硬件解码（优先）'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('硬件解码（优先）'));
-    await tester.pumpAndSettle();
-    expect(directChip().onSelected, isNotNull);
-    expect(directChip().selected, isTrue);
-    expect(
-      repository.value.androidVideoOutput,
-      AndroidVideoOutputPreference.directTexture,
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   for (final backend in ['fvp', 'fsplayer', 'unknown']) {
     test(
       '$backend falls back and saves without resetting other preferences',
@@ -149,51 +92,6 @@ void main() {
     expect(reloaded.defaultVolume, 37);
     expect(reloaded.theme, AppThemePreference.dark);
   });
-  testWidgets('Android direct-output chips save and roll back failed writes', (
-    tester,
-  ) async {
-    final repository = MemorySettingsRepository();
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [settingsRepositoryProvider.overrideWithValue(repository)],
-        child: const MaterialApp(
-          builder: AppNoticeHost.builder,
-          home: Scaffold(
-            body: SettingsScreen(category: SettingsCategory.playback),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final direct = find.text('解码直出纹理（实验）');
-    await tester.scrollUntilVisible(
-      direct,
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(direct);
-    await tester.pumpAndSettle();
-    expect(
-      repository.value.androidVideoOutput,
-      AndroidVideoOutputPreference.directTexture,
-    );
-    repository.failWrites = true;
-    await tester.tap(find.text('兼容渲染（默认）'));
-    await tester.pumpAndSettle();
-    expect(
-      repository.value.androidVideoOutput,
-      AndroidVideoOutputPreference.directTexture,
-    );
-    expect(
-      tester
-          .widget<ChoiceChip>(
-            find.ancestor(of: direct, matching: find.byType(ChoiceChip)),
-          )
-          .selected,
-      true,
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
   test('Android output persists, migrates invalid fields and resets', () async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);

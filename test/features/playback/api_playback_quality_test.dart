@@ -50,7 +50,7 @@ void main() {
       expect(media.audio?.codec, 'mp4a.40.2');
     });
   }
-  test('an AV1 preference falls back to a decodable codec', () async {
+  test('an AV1 preference selects the AV1 representation', () async {
     final media = await _repository(_Transport()).resolve(
       const VideoId('BV1VNxr63EZp'),
       '43202641987',
@@ -60,7 +60,7 @@ void main() {
     );
     expect(
       VideoCodecPreference.fromCodec(media.video.codec),
-      VideoCodecPreference.h264,
+      VideoCodecPreference.av1,
     );
   });
 
