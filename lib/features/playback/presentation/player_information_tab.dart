@@ -182,6 +182,10 @@ class _PlayerInformationTabState extends State<PlayerInformationTab>
               ('色彩范围', native?.colorLevels ?? '—'),
               ('色域原色', native?.colorPrimaries ?? '—'),
               ('传递函数', native?.transferFunction ?? '—'),
+              (
+                'HDR / 动态范围',
+                native?.hdrFormat ?? (info.isHdr ? 'HDR（源标记）' : '—'),
+              ),
               ('视频输出', native?.videoOutput ?? '—'),
               (
                 '视频已解码 / 已输出',
@@ -235,6 +239,20 @@ class _PlayerInformationTabState extends State<PlayerInformationTab>
                 ('音频已解码', _optionalYes(diagnostics?.hasDecodedAudio)),
             ],
           ),
+          if (info.hasSource)
+            (
+              'CDN 与线路',
+              [
+                ('视频 CDN', info.videoCdn ?? '—'),
+                (
+                  '音频 CDN',
+                  info.audioCdn ??
+                      (info.audioOnly || info.isLive ? '内嵌 / 同视频源' : '—'),
+                ),
+                if (info.liveLine case final line?) ('直播线路', line),
+                ('全部 CDN 主机', info.cdnHosts ?? '—'),
+              ],
+            ),
           (
             '缓存与同步',
             [

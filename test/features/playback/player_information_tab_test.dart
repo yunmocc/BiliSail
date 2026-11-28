@@ -204,9 +204,12 @@ void main() {
       expect(first, contains('缓存与同步\n缓冲至：00:00:30'));
       expect(first, contains('音画差（A−V）：-25.00 ms'));
       expect(first, contains('解码丢帧（累计）：—'));
+      expect(first, contains('视频 CDN：example.com'));
+      expect(first, contains('音频 CDN：example.com'));
+      expect(first, contains('全部 CDN 主机：example.com'));
       expect(
         first.split('\n').where((line) => line.contains('：')),
-        hasLength(46),
+        hasLength(50),
       );
       expect(first, endsWith('丢帧计数随媒体源重建而重置。'));
       expect(find.text('播放信息已复制'), findsOneWidget);

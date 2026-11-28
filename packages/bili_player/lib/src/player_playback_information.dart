@@ -31,6 +31,7 @@ final class PlayerPlaybackInformation {
     this.colorLevels,
     this.colorPrimaries,
     this.transferFunction,
+    this.hdrFormat,
     this.videoOutput,
     this.audioOutput,
     this.avSyncSeconds,
@@ -62,6 +63,9 @@ final class PlayerPlaybackInformation {
   /// Native stream metadata, distinct from measured demuxer bitrates.
   final double? videoNominalBitrate, audioNominalBitrate;
   final String? pixelFormat, colorMatrix, colorPrimaries, transferFunction;
+
+  /// Human-readable dynamic range, e.g. Dolby Vision P8 or HDR10.
+  final String? hdrFormat;
   final String? hardwarePixelFormat, colorLevels;
   final String? videoOutput, audioOutput;
 
@@ -115,6 +119,7 @@ final class PlayerPlaybackInformation {
         colorLevels: colorLevels,
         colorPrimaries: colorPrimaries,
         transferFunction: transferFunction,
+        hdrFormat: hdrFormat,
         videoOutput: videoOutput,
         audioOutput: audioOutput,
         avSyncSeconds: avSyncSeconds,

@@ -15,21 +15,30 @@ final class PlaybackInformation {
     required this.hasSource,
     required this.isLive,
     required this.audioOnly,
+    required this.isHdr,
     required this.sourceType,
     required this.quality,
     this.videoCodec,
     this.audioCodec,
     this.videoBandwidth,
     this.audioBandwidth,
+    this.videoCdn,
+    this.audioCdn,
+    this.cdnHosts,
+    this.liveLine,
     this.native,
   });
 
   final int sourceGeneration;
   final PlaybackSnapshot snapshot;
-  final bool hasSource, isLive, audioOnly;
+  final bool hasSource, isLive, audioOnly, isHdr;
   final String sourceType, quality;
   final String? videoCodec, audioCodec;
   final int? videoBandwidth, audioBandwidth;
+
+  /// Resolved CDN hosts for the active tracks, useful for spotting a faulty
+  /// mirror without exposing signed URLs.
+  final String? videoCdn, audioCdn, cdnHosts, liveLine;
   final PlayerPlaybackInformation? native;
 }
 
@@ -62,12 +71,28 @@ final class PlaybackInformationController
 
   PlaybackInformation _capture(PlayerPlaybackInformation? native) {
     final media = session.sourceMatchesAccount ? session.media : null;
+    final videoUrls = media?.video.urls ?? const <Uri>[];
+    final audioUrls = media?.audio?.urls ?? const <Uri>[];
+    String? host(Uri? uri) => uri == null || uri.host.isEmpty ? null : uri.host;
+    final hosts = <String>{
+      for (final uri in [...videoUrls, ...audioUrls])
+        if (uri.host.isNotEmpty) uri.host,
+    }.toList();
+    final lineIndex = media == null || media.liveStreams.isEmpty
+        ? -1
+        : media.liveStreams.indexWhere(
+            (stream) =>
+                stream.urls.isNotEmpty &&
+                videoUrls.isNotEmpty &&
+                stream.urls.first == videoUrls.first,
+          );
     return PlaybackInformation(
       sourceGeneration: session.sourceGeneration,
       snapshot: session.snapshots.value,
       hasSource: media != null,
       isLive: session.isLive,
       audioOnly: session.audioOnly,
+      isHdr: media?.isHdr ?? false,
       sourceType: switch (session.contentTarget) {
         OfflinePlaybackTarget() => '本地离线',
         _ => switch (media?.kind) {
@@ -93,6 +118,13 @@ final class PlaybackInformationController
       audioBandwidth: session.audioOnly
           ? media?.audio?.bandwidth ?? media?.video.bandwidth
           : media?.audio?.bandwidth,
+      videoCdn: host(videoUrls.firstOrNull),
+      audioCdn: host(audioUrls.firstOrNull),
+      cdnHosts: hosts.isEmpty
+          ? null
+          : '${hosts.take(4).join(' / ')}'
+                '${hosts.length > 4 ? ' +${hosts.length - 4}' : ''}',
+      liveLine: lineIndex >= 0 ? liveLineLabel(lineIndex) : null,
       native: native,
     );
   }

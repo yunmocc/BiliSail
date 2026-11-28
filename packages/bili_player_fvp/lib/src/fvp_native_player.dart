@@ -319,7 +319,9 @@ final class _MdkPlayerPort
         _repreparing ||
         player == null ||
         _interrupted.isCompleted ||
-        !player.mediaStatus.test(mdk.MediaStatus.loaded)) {
+        // Live playlists never report `loaded`; tracks are already discovered
+        // once prepare completed, which is the safe point to sample metadata.
+        !_prepared.isCompleted) {
       return null;
     }
     return sampleFvpPlaybackInformation(
@@ -334,6 +336,7 @@ final class _MdkPlayerPort
       generation: generation,
       positionMilliseconds: positionMilliseconds,
       bufferedMilliseconds: bufferedMilliseconds,
+      audioPositionMilliseconds: _audioCompanion?.positionMilliseconds,
       audioGainDb: audioGainDb,
     );
   }
@@ -484,20 +487,35 @@ final class _MdkPlayerPort
   Future<bool> confirmVideoFrame() async {
     _connectAudioClock();
     _holdClock(_startPosition.inMilliseconds);
-    if (_live && _liveStarted) {
-      // The engine starts live playback before confirming video. The texture is
-      // already registered, so the first rendered frame is the only evidence
-      // still required; a network seek would restart the live pipeline.
-      return _active(_firstFrame.ready(directSurface: false));
+    if (_live) {
+      // The engine starts live playback before confirming video, but MDK only
+      // delivers a frame to a texture attached after the pipeline began once a
+      // new target is decoded. Pause and re-enter the buffered live window so
+      // the first frame is actually rendered, then resume playback.
+      if (_liveStarted) await _active(_pauseAndWait());
+      final result = await _active(
+        _player.seek(
+          position: 0,
+          flags: const mdk.SeekFlag(
+            mdk.SeekFlag.fromStart | mdk.SeekFlag.inCache,
+          ),
+        ),
+      );
+      if (result < 0) {
+        // Some live formats reject seeks; keep the user's intent and await a
+        // naturally rendered frame instead of failing an otherwise playing
+        // stream.
+        if (_liveStarted) play();
+        return _active(_firstFrame.ready(directSurface: false));
+      }
+      final ready = await _active(_firstFrame.ready(directSurface: false));
+      if (ready && _liveStarted) play();
+      return ready;
     }
-    // Live without early playback must decode an already buffered target while
-    // paused, without advancing the live clock to obtain a frame.
     final result = await _active(
       _player.seek(
-        position: _live ? 0 : _startPosition.inMilliseconds,
-        flags: _live
-            ? const mdk.SeekFlag(mdk.SeekFlag.fromStart | mdk.SeekFlag.inCache)
-            : _preciseSeek,
+        position: _startPosition.inMilliseconds,
+        flags: _preciseSeek,
       ),
     );
     if (result < 0) return false;
