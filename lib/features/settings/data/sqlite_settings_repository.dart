@@ -217,11 +217,13 @@ class SqliteSettingsRepository implements SettingsRepository {
         final int quality => quality,
         _ => AppSettings.networkLiveQuality,
       },
-      preferredVideoCodec:
-          VideoCodecPreference.values
-              .where((item) => item.name == decoded['preferredVideoCodec'])
-              .firstOrNull ??
-          VideoCodecPreference.h264,
+      preferredVideoCodec: switch (VideoCodecPreference.values
+          .where((item) => item.name == decoded['preferredVideoCodec'])
+          .firstOrNull) {
+        // AVPlayer cannot decode AV1 on supported iPads; migrate old values.
+        VideoCodecPreference.av1 => VideoCodecPreference.h264,
+        final value => value ?? VideoCodecPreference.h264,
+      },
       liveStreamPreference: LiveStreamPreference.fromJson(
         decoded['liveStreamPreference'],
       ),

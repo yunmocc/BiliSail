@@ -29,8 +29,9 @@ final class ApplePlayerChannel {
     final result = await _methods
         .invokeMapMethod<String, Object?>('open', payload)
         .timeout(timeout);
-    if (result == null)
+    if (result == null) {
       throw StateError('Native player returned no track data.');
+    }
     return result;
   }
 

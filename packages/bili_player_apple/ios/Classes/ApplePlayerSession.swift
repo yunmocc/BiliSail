@@ -390,8 +390,14 @@ final class ApplePlayerSession: NSObject {
     bufferAheadMs: Double,
     completion: @escaping (Result<AVPlayerItem, Error>) -> Void
   ) {
-    let videoAsset = makeAsset(videoURL, headers: headers)
-    let audioAsset = audioURL.map { makeAsset($0, headers: headers) }
+    let videoAsset = makeAsset(
+      videoURL,
+      headers: headers,
+      mime: audioOnly ? "audio/mp4" : "video/mp4"
+    )
+    let audioAsset = audioURL.map {
+      makeAsset($0, headers: headers, mime: "audio/mp4")
+    }
     let keys = ["playable", "duration", "tracks"]
     load(videoAsset, keys: keys) { [weak self] videoError in
       guard let self else { return }
@@ -427,7 +433,8 @@ final class ApplePlayerSession: NSObject {
 
   private func makeAsset(
     _ url: URL,
-    headers: [String: String]
+    headers: [String: String],
+    mime: String
   ) -> AVURLAsset {
     if url.isFileURL {
       return AVURLAsset(url: url)
@@ -438,6 +445,13 @@ final class ApplePlayerSession: NSObject {
       // is unavailable, so use the widely deployed asset option. No request
       // data leaves this process except to the media host.
       options["AVURLAssetHTTPHeaderFieldsKey"] = headers
+    }
+    // Bilibili serves DASH tracks as `.m4s`, which AVFoundation does not map to
+    // a container on its own. The out-of-band MIME option uses the same string
+    // value as the AVFoundation constant, which is not exposed to Swift on iOS.
+    let ext = url.pathExtension.lowercased()
+    if ext == "m4s" || ext.isEmpty {
+      options["AVURLAssetOutOfBandMIMETypeKey"] = mime
     }
     return AVURLAsset(url: url, options: options)
   }

@@ -94,9 +94,13 @@ final class ApiContentPlaybackRepository
     final streams = List<LivePlaybackStream>.unmodifiable([
       for (final stream in info.streams)
         if (stream.urls.isNotEmpty &&
-            VideoCodecPreference.fromCodec(stream.codec) != null &&
-            const ['http_hls', 'http_stream'].contains(stream.protocol) &&
-            const ['ts', 'fmp4', 'flv'].contains(stream.format))
+            // AVPlayer only plays HLS live and has no AV1 decoder.
+            stream.protocol == 'http_hls' &&
+            const ['ts', 'fmp4'].contains(stream.format) &&
+            switch (VideoCodecPreference.fromCodec(stream.codec)) {
+              null || VideoCodecPreference.av1 => false,
+              _ => true,
+            })
           LivePlaybackStream(
             preference: LiveStreamPreference(
               protocol: stream.protocol,
