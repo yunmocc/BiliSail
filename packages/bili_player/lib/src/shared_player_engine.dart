@@ -41,6 +41,7 @@ class SharedPlayerEngine
   Timer? _networkRetry;
   final _networkClock = Stopwatch()..start();
   Duration? _lastNetworkError;
+  final _starvationRestarts = <Duration>[];
   PlaybackBackend? _backend;
   PlaybackBackend? get activeBackend => _backend;
   Future<PlaybackBackend>? _allocation;
@@ -646,16 +647,34 @@ class SharedPlayerEngine
             _snapshot.desiredPlaying &&
             duration > Duration.zero &&
             duration - position > const Duration(milliseconds: 500)) {
+          // A reader that loses its connection after the cache drained reports
+          // EOF far from the media end. That is a recoverable read stall: let
+          // the session reopen the same pair at this position. EOF with data
+          // still buffered ahead means the source itself was truncated. A
+          // source that keeps ending at the same spot is not retried forever.
+          final buffered = backend.buffered;
+          final starved =
+              buffered != null &&
+              buffered - position <= const Duration(seconds: 1);
+          final now = _networkClock.elapsed;
+          _starvationRestarts.removeWhere(
+            (attempt) => now - attempt > const Duration(seconds: 30),
+          );
+          final recover = starved && _starvationRestarts.length < 3;
+          if (recover) _starvationRestarts.add(now);
+          final kind = recover
+              ? PlayerFailureKind.networkRead
+              : PlayerFailureKind.videoInterrupted;
           final revision = _seekRevision;
           _diagnose(
             PlayerDiagnosticKind.playbackStalled,
-            failureKind: PlayerFailureKind.videoInterrupted,
+            failureKind: kind,
             stallReason: PlaybackStallReason.videoBuffer,
           );
           if (!_current(generation, backend) || revision != _seekRevision) {
             return;
           }
-          unawaited(_fail(PlayerFailureKind.videoInterrupted));
+          unawaited(_fail(kind));
           return;
         }
         // At audio-only EOF the sampled audio clock can lag behind the

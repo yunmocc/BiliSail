@@ -1164,6 +1164,22 @@ void main() {
     },
   );
 
+  test('premature completion with a drained cache is a read stall', () async {
+    final backend = _Backend()..buffered = const Duration(seconds: 10);
+    final engine = SharedPlayerEngine(createBackend: () => backend);
+    addTearDown(engine.dispose);
+    await engine.open(pair, const OpenOptions(play: true));
+    final failure = engine.failures.first;
+    backend.signals.add(
+      const BackendEvent(
+        BackendEventKind.ended,
+        position: Duration(seconds: 10),
+      ),
+    );
+    expect((await failure).kind, PlayerFailureKind.networkRead);
+    expect(engine.currentSnapshot.phase, PlaybackPhase.failed);
+  });
+
   test(
     'DASH EOF preserves the last video position and buffer endpoint',
     () async {

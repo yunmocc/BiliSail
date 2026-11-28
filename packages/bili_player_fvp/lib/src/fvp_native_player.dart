@@ -118,6 +118,12 @@ final class _MdkPlayerPort
   Pointer<Void> _audioClock = nullptr;
   int _durationMilliseconds = 0;
   bool _videoBuffering = false, _audioBuffering = false;
+
+  /// DASH audio is a separate player and the video master clock. A starved
+  /// video demuxer must freeze it, or sound runs ahead of a picture that
+  /// cannot render.
+  bool _videoStallHeldAudio = false;
+  bool _playRequested = false;
   final _playingClock = Stopwatch();
   double _rate = 1;
   int _audioReadyPosition = 0;
@@ -172,12 +178,39 @@ final class _MdkPlayerPort
       _audioBuffering = value;
     } else {
       _videoBuffering = value;
+      _syncAudioToVideoStall(value);
     }
     _statuses.add(
       _audioBuffering || _videoBuffering
           ? FvpNativeStatus.buffering
           : FvpNativeStatus.buffered,
     );
+  }
+
+  /// Freeze the companion audio while video frames are missing. The audio
+  /// position is the video master clock, so holding at the current position
+  /// resumes the picture from the same instant instead of skipping ahead.
+  void _syncAudioToVideoStall(bool buffering) {
+    if (_closed ||
+        _closing ||
+        _live ||
+        _repreparing ||
+        _seekCancelled != null) {
+      return;
+    }
+    final companion = _audioCompanion;
+    if (companion == null) return;
+    if (buffering) {
+      if (_videoStallHeldAudio || !_playRequested) return;
+      _videoStallHeldAudio = true;
+      _holdClock(companion.positionMilliseconds);
+      companion.pause();
+    } else if (_videoStallHeldAudio) {
+      _videoStallHeldAudio = false;
+      if (!_playRequested) return;
+      companion.play();
+      audio_activity.bili_fvp_audio_clock_play(_audioClock);
+    }
   }
 
   void _companionStatus(FvpNativeStatus status) {
@@ -585,6 +618,8 @@ final class _MdkPlayerPort
 
   @override
   void play() {
+    _playRequested = true;
+    _videoStallHeldAudio = false;
     _audioCompanion?.play();
     audio_activity.bili_fvp_audio_clock_play(_audioClock);
     _playingClock
@@ -597,6 +632,8 @@ final class _MdkPlayerPort
       audio_activity.bili_fvp_audio_clock_hold(_audioClock, position);
   @override
   void pause() {
+    _playRequested = false;
+    _videoStallHeldAudio = false;
     if (_dimensions == null && _native != null) {
       _preparedAudioPosition = positionMilliseconds;
     }
@@ -619,6 +656,8 @@ final class _MdkPlayerPort
   @override
   Future<bool> pauseAndConfirm() async {
     if (_closed) return true;
+    _playRequested = false;
+    _videoStallHeldAudio = false;
     if (_closing || _ended || _repreparing) return false;
     if (_audioCompanion case final companion?) {
       if (!await companion.pauseAndConfirm()) return false;
@@ -630,6 +669,8 @@ final class _MdkPlayerPort
 
   @override
   void interrupt() {
+    _playRequested = false;
+    _videoStallHeldAudio = false;
     _holdClock(_audioCompanion?.positionMilliseconds ?? positionMilliseconds);
     final cancelled = _seekCancelled;
     if (cancelled != null && !cancelled.isCompleted) cancelled.complete(-2);
@@ -644,6 +685,8 @@ final class _MdkPlayerPort
 
   @override
   Future<int> seek(Duration target) async {
+    _playRequested = false;
+    _videoStallHeldAudio = false;
     final forward = target.inMilliseconds - positionMilliseconds;
     final flags =
         !_ended &&
