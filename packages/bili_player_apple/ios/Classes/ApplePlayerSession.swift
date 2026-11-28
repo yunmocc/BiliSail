@@ -222,32 +222,29 @@ final class ApplePlayerSession: NSObject {
     let token = seekGeneration
     pendingSeekResult = result
 
-    let group = DispatchGroup()
-    group.enter()
+    // The video seek owns the response so dragging stays responsive; audio is
+    // seeked in parallel and the drift corrector re-aligns it moments later.
     player.seek(
       to: target,
       toleranceBefore: tolerance,
       toleranceAfter: tolerance
     ) { _ in
-      DispatchQueue.main.async { group.leave() }
+      DispatchQueue.main.async { [weak self] in
+        guard let self, self.seekGeneration == token else { return }
+        let callback = self.pendingSeekResult
+        self.pendingSeekResult = nil
+        callback?(seconds)
+      }
     }
     if externalAudio,
        let audio = audioPlayer,
        audio.currentItem?.status == .readyToPlay {
-      group.enter()
       audio.seek(
         to: target,
         toleranceBefore: tolerance,
-        toleranceAfter: tolerance
-      ) { _ in
-        DispatchQueue.main.async { group.leave() }
-      }
-    }
-    group.notify(queue: .main) { [weak self] in
-      guard let self, self.seekGeneration == token else { return }
-      let callback = self.pendingSeekResult
-      self.pendingSeekResult = nil
-      callback?(seconds)
+        toleranceAfter: tolerance,
+        completionHandler: { _ in }
+      )
     }
   }
 
