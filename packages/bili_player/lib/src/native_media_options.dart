@@ -40,14 +40,19 @@ Map<String, String> nativeCacheOptions({
   required bool live,
   required Duration? window,
   required double rate,
+  bool isIos = false,
 }) {
   final seconds = window == null ? null : window.inMicroseconds / 1e6 * rate;
   const mib = 1024 * 1024;
+  // VideoToolbox copies decoded frames, so a 4K stream needs a deeper packet
+  // queue to keep the video decoder fed while audio continues independently.
+  final forwardBytes = (isIos ? 32 : 8) * mib;
+  final backBytes = live ? 0 : (isIos ? 8 : 4) * mib;
   return {
     'cache': 'yes',
     'cache-on-disk': 'no',
-    'demuxer-max-bytes': (8 * mib).toString(),
-    'demuxer-max-back-bytes': (live ? 0 : 4 * mib).toString(),
+    'demuxer-max-bytes': forwardBytes.toString(),
+    'demuxer-max-back-bytes': backBytes.toString(),
     if (seconds != null) ...{
       'cache-secs': seconds.toStringAsFixed(3),
       'demuxer-hysteresis-secs': (seconds / 1.5).toStringAsFixed(3),

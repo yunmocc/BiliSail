@@ -6,6 +6,7 @@ import 'native_readiness.dart';
 /// Pitch correction, audio buffering and decoder queues remain owned by mpv.
 Future<void> configureNativePlaybackPolicy({
   required bool isAndroid,
+  bool isIos = false,
   required Future<void> Function(String, String) write,
   required Future<String> Function(String) read,
   required bool Function() isCurrent,
@@ -36,8 +37,16 @@ Future<void> configureNativePlaybackPolicy({
     // instead of leaving an empty demuxer cache paused indefinitely.
     'stream-lavf-o': 'rw_timeout=5000000',
     'video-sync': 'display-resample',
-    'autosync': '${experimentalAutosync ?? (isAndroid ? 30 : 0)}',
+    // iOS hardware decoders can drop frames during a 2x/3x audio-video split.
+    // Bound the drift on both Apple and Android instead of letting audio run.
+    'autosync': '${experimentalAutosync ?? (isAndroid || isIos ? 30 : 0)}',
     if (isAndroid) 'ao': 'opensles,aaudio,audiotrack',
+    if (isIos) ...{
+      // Keep the core together with its video clock when the cache underruns.
+      'cache-pause': 'yes',
+      'cache-pause-wait': '1.000000',
+      'cache-pause-initial': 'no',
+    },
     // The official SDK overrides these; PiliPlus leaves mpv's defaults intact.
     'hr-seek': 'default',
     'hr-seek-framedrop': 'yes',

@@ -55,6 +55,37 @@ void main() {
     }
   }
 
+  test('iOS bounds drift and keeps cache pause native', () async {
+    final values = {'curl-enabled': 'no', 'autosync': '0'};
+    await configureNativePlaybackPolicy(
+      isAndroid: false,
+      isIos: true,
+      write: (key, value) async => values[key] = value,
+      read: (key) async => values[key] ?? '',
+      isCurrent: () => true,
+      timeout: const Duration(seconds: 2),
+    );
+    expect(values['autosync'], '30');
+    expect(values['cache-pause'], 'yes');
+    expect(values['cache-pause-wait'], '1.000000');
+    expect(values['cache-pause-initial'], 'no');
+    expect(values['video-sync'], 'display-resample');
+  });
+
+  test('an explicit autosync experiment still wins on iOS', () async {
+    final values = {'curl-enabled': 'no', 'autosync': '0'};
+    await configureNativePlaybackPolicy(
+      isAndroid: false,
+      isIos: true,
+      write: (key, value) async => values[key] = value,
+      read: (key) async => values[key] ?? '',
+      isCurrent: () => true,
+      timeout: const Duration(seconds: 2),
+      experimentalAutosync: 0,
+    );
+    expect(values['autosync'], '0');
+  });
+
   test('ignored native writes fail instead of silently using curl', () async {
     await expectLater(
       configureNativePlaybackPolicy(

@@ -38,6 +38,25 @@ void main() {
     expect(live['demuxer-max-bytes'], '8388608');
     expect(live['demuxer-max-back-bytes'], '0');
   });
+  test('iOS reserves a deeper forward cache for 4K video', () {
+    final vod = nativeCacheOptions(
+      live: false,
+      window: const Duration(seconds: 16),
+      rate: 2,
+      isIos: true,
+    );
+    expect(vod['demuxer-max-bytes'], '33554432');
+    expect(vod['demuxer-max-back-bytes'], '8388608');
+    expect(vod['cache-secs'], '32.000');
+    final live = nativeCacheOptions(
+      live: true,
+      window: null,
+      rate: 1,
+      isIos: true,
+    );
+    expect(live['demuxer-max-bytes'], '33554432');
+    expect(live['demuxer-max-back-bytes'], '0');
+  });
   test(
     'native headers split special fields without changing signed values',
     () {

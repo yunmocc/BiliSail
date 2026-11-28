@@ -1,0 +1,90 @@
+name: iOS IPA
+
+# Builds the unsigned iOS arm64 IPA for the player-specialized branch.
+# The archive must be signed with an Apple development/distribution identity
+# (or sideloaded with AltStore/Sideloadly) before it can be installed.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本 x.y.z+N（留空使用 pubspec.yaml）'
+        type: string
+        default: ''
+      runner:
+        description: 'macOS runner label；若 fork 不可用 macos-26，可改为 macos-15（Xcode 较旧）'
+        type: string
+        default: 'macos-26'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned iOS IPA
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select the newest installed Xcode
+        shell: bash
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -n 1)
+          if [[ -n "$latest" ]]; then
+            echo "DEVELOPER_DIR=$latest/Contents/Developer" >> "$GITHUB_ENV"
+            sudo xcode-select -s "$latest/Contents/Developer"
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          pod --version
+      - uses: ./.github/actions/restore-flutter
+        id: flutter
+        with:
+          architecture: arm64
+      - name: Ensure the release script finds a python alias
+        shell: bash
+        run: |
+          if ! command -v python >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            ln -sf "$(command -v python3)" "$RUNNER_TEMP/bin/python"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
+      - name: Resolve version
+        id: plan
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          ENABLE_ANDROID: 'false'
+          ENABLE_WINDOWS: 'false'
+          ENABLE_MACOS: 'false'
+          ENABLE_IOS: 'true'
+          ENABLE_LINUX: 'false'
+        run: ./tool/ci-build-plan.ps1
+      - uses: ./.github/actions/restore-mux
+        id: mux-cache
+        with:
+          target: ios-arm64
+      - name: Prepare the iOS mux component
+        id: mux
+        shell: pwsh
+        env:
+          BILISAIL_MUX_CACHE: 'true'
+        run: ./tool/build-download-mux.ps1 -Target ios-arm64
+      - name: Build unsigned IPA
+        shell: pwsh
+        env:
+          BILISAIL_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BILISAIL_MUX_CACHE: 'true'
+        run: ./tool/build-release.ps1 -Target ios-arm64 -Version '${{ steps.plan.outputs.version }}'
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: BiliSail-${{ steps.plan.outputs.version }}-ios-arm64-unsigned
+          path: artifacts/ios-arm64/release/*.ipa
+          if-no-files-found: error
+          retention-days: 14

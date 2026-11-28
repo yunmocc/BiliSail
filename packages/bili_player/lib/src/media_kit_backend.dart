@@ -14,6 +14,7 @@ import 'validated_source.dart';
 import 'native_media_options.dart';
 import 'native_player_properties.dart';
 import 'native_buffering_diagnostics.dart';
+import 'ios_av_sync_guard.dart';
 import 'native_load_observer.dart';
 import 'native_audio_gain.dart';
 import 'dolby_audio_output.dart';
@@ -85,6 +86,12 @@ final class MediaKitBackend
   bool _networkOpenError = false;
   bool _fatalLiveHlsRead = false;
   NativeBufferingDiagnostics? _bufferDiagnostics;
+  final _avSyncGuard = IosAvSyncGuard();
+  final _avSyncClock = Stopwatch()..start();
+  Timer? _avSyncTimer;
+  bool _avSyncSampling = false;
+  bool _avSyncNetworkSource = false;
+  bool _avSyncBuffering = false;
   DiagnosticSourceKind? diagnosticSourceKind;
   NativeReadinessStage? get readinessStage => _readinessStage;
   double get appliedAudioGainDb => _audioGain?.gainDb ?? 0;
@@ -597,6 +604,7 @@ final class MediaKitBackend
               ? options.requestedBufferAhead
               : options.maxBufferAhead,
           rate: options.requestedBufferAhead == null ? options.rate : 1,
+          isIos: Platform.isIOS,
         ),
     };
     final previousHook = _sourceOptionsHook;
@@ -915,6 +923,7 @@ final class MediaKitBackend
   @override
   Future<Duration> seekTo(Duration target, PlaybackOperation operation) async {
     operation.check();
+    _avSyncGuard.reset();
     _seek = operation;
     final player = _player!;
     final generation = _generation;
@@ -1002,6 +1011,8 @@ final class MediaKitBackend
         emit: (event) => onDiagnostic?.call(event),
       );
     }
+    _avSyncNetworkSource = networkSource;
+    _startAvSyncGuard(player, generation);
 
     _subscriptions.addAll([
       player.stream.videoParams.listen((value) {
@@ -1105,16 +1116,141 @@ final class MediaKitBackend
     ]);
   }
 
+  void _startAvSyncGuard(mk.Player player, int generation) {
+    _stopAvSyncGuard();
+    if (!Platform.isIOS) return;
+    _avSyncTimer = Timer.periodic(
+      const Duration(milliseconds: 300),
+      (_) => unawaited(_sampleAvSyncGuard(player, generation)),
+    );
+  }
+
+  void _stopAvSyncGuard() {
+    _avSyncTimer?.cancel();
+    _avSyncTimer = null;
+    _avSyncSampling = false;
+    _avSyncBuffering = false;
+    _avSyncGuard.reset();
+  }
+
+  bool _avSyncActive(mk.Player player, int generation) =>
+      !_disposed &&
+      generation == _generation &&
+      identical(player, _player) &&
+      snapshot().generation == generation;
+
+  bool get _avSyncEligible {
+    if (!_avSyncNetworkSource || !Platform.isIOS) return false;
+    final state = _snapshot;
+    return state.desiredPlaying &&
+        !state.isSeeking &&
+        state.rate > 1 &&
+        (state.phase == PlaybackPhase.playing ||
+            state.phase == PlaybackPhase.buffering) &&
+        state.videoDimensions != null;
+  }
+
+  /// At rates above 1x mpv can keep audio running while hardware video decode
+  /// waits on the network. Pause the whole pipeline until the video clock and
+  /// the forward cache have caught up again.
+  Future<void> _sampleAvSyncGuard(mk.Player player, int generation) async {
+    if (_avSyncSampling || !_avSyncActive(player, generation)) return;
+    final eligible = _avSyncEligible;
+    if (!eligible && !_avSyncGuard.pausedForVideo) return;
+    _avSyncSampling = true;
+    try {
+      Future<String?> read(String name) async {
+        try {
+          return await player
+              .getPropertyAsync(name)
+              .timeout(const Duration(milliseconds: 300));
+        } on Object {
+          return null;
+        }
+      }
+
+      final values = await Future.wait([
+        read('audio-pts'),
+        read('video-pts'),
+        read('demuxer-cache-duration'),
+        read('paused-for-cache'),
+        read('hwdec-current'),
+      ]);
+      if (!_avSyncActive(player, generation)) return;
+      // Playback intent can change while the native reads are in flight.
+      final currentEligible = _avSyncEligible;
+      double? number(String? value) {
+        final parsed = double.tryParse(value ?? '');
+        return parsed != null && parsed.isFinite && parsed.abs() <= 1e7
+            ? parsed
+            : null;
+      }
+
+      final decoder = values[4] ?? '';
+      final action = _avSyncGuard.evaluate(
+        now: _avSyncClock.elapsed,
+        eligible: currentEligible,
+        sample: AvSyncSample(
+          audioPositionSeconds: number(values[0]),
+          videoPositionSeconds: number(values[1]),
+          cacheDurationSeconds: number(values[2]),
+          pausedForCache: values[3] == 'yes',
+          hardwareDecoding: decoder.isNotEmpty && decoder != 'no',
+        ),
+      );
+      if (action == AvSyncAction.pause) {
+        // Report the underrun before pausing so the UI enters buffering rather
+        // than looking like it is playing silent audio.
+        _avSyncBuffering = true;
+        _emit(const BackendEvent(BackendEventKind.buffering, value: true));
+        try {
+          await player.pause();
+        } on Object {
+          _avSyncGuard.reset();
+          _avSyncBuffering = false;
+          _emit(const BackendEvent(BackendEventKind.buffering, value: false));
+        }
+        return;
+      }
+      if (action == AvSyncAction.resume) {
+        if (!_avSyncActive(player, generation) || !_snapshot.desiredPlaying) {
+          _avSyncGuard.reset();
+          return;
+        }
+        try {
+          await player.play();
+          _avSyncBuffering = false;
+          _emit(const BackendEvent(BackendEventKind.buffering, value: false));
+        } on Object {
+          _avSyncGuard.reset();
+        }
+      }
+    } finally {
+      _avSyncSampling = false;
+    }
+  }
+
   @override
   Future<void> play() async {
+    // A user or seek-driven play supersedes the guard's temporary pause.
+    _avSyncGuard.reset();
     await _player!.play();
+    if (_avSyncBuffering) {
+      _avSyncBuffering = false;
+      _emit(const BackendEvent(BackendEventKind.buffering, value: false));
+    }
   }
 
   void captureReadyDiagnostics() => _bufferDiagnostics?.sourceReady();
 
   @override
   Future<bool> pauseAndWait() async {
+    _avSyncGuard.reset();
     await _player?.pause();
+    if (_avSyncBuffering) {
+      _avSyncBuffering = false;
+      _emit(const BackendEvent(BackendEventKind.buffering, value: false));
+    }
     return true;
   }
 
@@ -1151,6 +1287,7 @@ final class MediaKitBackend
 
   @override
   Future<void> setRate(double rate) async {
+    final guardPaused = _avSyncGuard.pausedForVideo;
     final apple = _appleJocOutput;
     if (apple != null) {
       apple.rate = rate;
@@ -1163,6 +1300,20 @@ final class MediaKitBackend
     await _player!.setRate(rate);
     if (identical(apple, _appleJocOutput)) apple?.apply();
     _dolbyOutput?.apply();
+    if (guardPaused && rate <= 1) {
+      // Returning to normal speed ends the long-press stall immediately
+      // instead of waiting for the next guard sample.
+      _avSyncGuard.reset();
+      _avSyncBuffering = false;
+      if (!_disposed && _snapshot.desiredPlaying) {
+        try {
+          await _player!.play();
+          _emit(const BackendEvent(BackendEventKind.buffering, value: false));
+        } on Object {
+          // The native player reports its own failure through the event stream.
+        }
+      }
+    }
   }
 
   @override
@@ -1195,6 +1346,7 @@ final class MediaKitBackend
   Duration? get buffered => _player?.state.buffer;
   @override
   void interrupt() {
+    _stopAvSyncGuard();
     ++_generation;
     _dolbyOutput?.stop();
     _dolbyOutput = null;
@@ -1231,6 +1383,7 @@ final class MediaKitBackend
 
   @override
   Future<void> resetForNextSource(PlaybackOperation operation) async {
+    _stopAvSyncGuard();
     _dolbyOutput?.stop();
     _dolbyOutput = null;
     _appleJocOutput = null;
