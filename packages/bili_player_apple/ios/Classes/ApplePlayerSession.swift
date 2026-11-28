@@ -276,7 +276,8 @@ final class ApplePlayerSession: NSObject {
     if let observed = accessLog?.observedBitrate, observed > 0 {
       info["videoBitrate"] = observed / 1000
     }
-    if let format = videoTrack?.formatDescriptions.first {
+    if let raw = videoTrack?.formatDescriptions.first {
+      let format = raw as! CMFormatDescription
       if let primaries = stringExtension(
         format,
         kCMFormatDescriptionExtension_ColorPrimaries
@@ -845,7 +846,8 @@ final class ApplePlayerSession: NSObject {
   }
 
   private func codecName(_ track: AVAssetTrack) -> String? {
-    guard let format = track.formatDescriptions.first else { return nil }
+    guard let raw = track.formatDescriptions.first else { return nil }
+    let format = raw as! CMFormatDescription
     let code = CMFormatDescriptionGetMediaSubType(format)
     let bytes: [UInt8] = [
       UInt8((code >> 24) & 0xff),
@@ -869,8 +871,9 @@ final class ApplePlayerSession: NSObject {
   }
 
   private func audioDescription(_ track: AVAssetTrack) -> (channels: Int, sampleRate: Int)? {
-    guard let format = track.formatDescriptions.first,
-          let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)
+    guard let raw = track.formatDescriptions.first else { return nil }
+    let format = raw as! CMAudioFormatDescription
+    guard let description = CMAudioFormatDescriptionGetStreamBasicDescription(format)
     else { return nil }
     return (
       Int(description.pointee.mChannelsPerFrame),
