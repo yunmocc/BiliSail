@@ -608,6 +608,35 @@ final class MediaKitVideoOutput
     _updateViewportCap();
   }
 
+  /// iOS' OpenGL texture path cannot sustain 4K at 2x on older iPads. Render
+  /// into a smaller texture while speed is raised, then restore the decoded
+  /// size. Decoding stays at the source resolution; only presentation shrinks.
+  Future<void> applySpeedRenderCap(double rate) async {
+    if (!Platform.isIOS || _disposed) return;
+    final controller = _controller.value;
+    final dimensions = _videoDimensions;
+    if (controller == null || dimensions == null) return;
+    // HDR / Dolby Vision use the Metal platform view and own their size.
+    if (_hdr.value != null) return;
+    try {
+      if (rate <= 1) {
+        await controller.setSize().timeout(const Duration(seconds: 2));
+        return;
+      }
+      const maxHeight = 1080;
+      final scale = math.min(1.0, maxHeight / dimensions.height);
+      if (scale >= 1.0) return;
+      await controller
+          .setSize(
+            width: math.max(2, (dimensions.width * scale).round()),
+            height: math.max(2, (dimensions.height * scale).round()),
+          )
+          .timeout(const Duration(seconds: 2));
+    } on Object catch (error) {
+      debugPrint('iOS speed render cap failed: ${error.runtimeType}');
+    }
+  }
+
   void _updateDecodedSize() {
     _updateAndroidViewport();
     final controller = _controller.value;

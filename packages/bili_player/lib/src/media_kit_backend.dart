@@ -1288,6 +1288,11 @@ final class MediaKitBackend
   @override
   Future<void> setRate(double rate) async {
     final guardPaused = _avSyncGuard.pausedForVideo;
+    if (rate > 1) {
+      // Shrink the iOS presentation texture before the speed change so the
+      // 4K OpenGL path does not fall behind and abort under 2x load.
+      await _videoOutput.applySpeedRenderCap(rate);
+    }
     final apple = _appleJocOutput;
     if (apple != null) {
       apple.rate = rate;
@@ -1298,6 +1303,7 @@ final class MediaKitBackend
       if (rate != 1) output.apply();
     }
     await _player!.setRate(rate);
+    if (rate <= 1) await _videoOutput.applySpeedRenderCap(rate);
     if (identical(apple, _appleJocOutput)) apple?.apply();
     _dolbyOutput?.apply();
     if (guardPaused && rate <= 1) {
